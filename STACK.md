@@ -41,9 +41,9 @@ runs. `pnpm feedback "..."` appends a stub to TEMPLATE_FEEDBACK.md.
   and `markdown.ts` are the adapters, `+page.svelte` the call site refusing an
   empty import, `io/download.ts` hands the browser a file.
 - **Viewer** — `src/lib/viewer/`: three.js, imported after first paint.
-  `viewer.ts` is the scene, desktop orbit and every VR control; `rig.ts`,
-  `views.ts`, `files.ts`, `keyboard.ts` are the pure parts with tests;
-  `load.ts` the loaders. The viewer never holds data: it calls `ViewerHooks`
+  `viewer.ts` is the scene, desktop orbit and every VR control; `ui.ts` the
+  headset panels (uikit); `rig.ts`, `views.ts`, `files.ts`, `keyboard.ts`,
+  `panel.ts` the pure parts. The viewer never holds data: it calls `ViewerHooks`
   and is fed back through `$effect`. See TECHNICAL.md § The viewer.
 - **Security policy** — `vite.config.ts` (SvelteKit's `csp`, `mode: 'auto'`)
   and the response headers in `vercel.json`.

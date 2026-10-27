@@ -88,12 +88,12 @@ down is left to you.
 on by itself at the start of a sentence; shifted, comma and full stop give
 `?` and `!`.
 
-The controllers give a short buzz when a press, a teleport or a grab takes
-effect.
+Your controllers are shown as the Quest's own, and give a short buzz when a
+press, a teleport or a grab takes effect.
 
-Hand tracking works for pointing and pinching at the menu and keyboard;
-pinching at empty space opens the menu. Walking, teleporting and scaling
-need the controllers.
+With hand tracking, your hands are shown; point and pinch at the menu and
+keyboard, or press a key with a fingertip. Pinching at empty space opens
+the menu. Walking, teleporting and scaling need the controllers.
 
 ## Sketches
 

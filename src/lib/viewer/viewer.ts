@@ -5,7 +5,6 @@ import {
 	Sphere,
 	Spherical,
 	Vector4,
-	BoxGeometry,
 	BufferGeometry,
 	Color,
 	DirectionalLight,
@@ -36,7 +35,10 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Annotation, Vec3 } from '$lib/store/notes';
 import { autoShift, keyboardRows, pressKey } from './keyboard';
 import { Markers } from './markers';
-import { Panel, type Control } from './panel';
+import type { Control } from './panel';
+import { Panel } from './ui';
+import { reversePainterSortStable } from '@pmndrs/uikit';
+import { createXRStore } from '@pmndrs/xr';
 import { disposeScene } from './dispose';
 import { SketchLayer } from './sketch-layer';
 import { ellipse, planeBasis, rectangle, simplify, toVec3 } from './sketch';
@@ -126,6 +128,13 @@ const SNAP_TURN = Math.PI / 6;
 /** Walking pace with the stick fully over, metres per second of the room. */
 const MOVE_SPEED = 2;
 const DEADZONE = 0.2;
+/**
+ * A panel button is pressed by a trigger pull or pinch of any length. The
+ * pointer events' default counts only one shorter than 300 ms as a click —
+ * made for mouse buttons; a deliberate pull on a Quest trigger is slower,
+ * and missed. Nothing in a panel is dragged, so length means nothing here.
+ */
+const PRESS = { clickThresholdMs: 10_000 };
 /** The scales the menu offers besides Fit and 1:1. */
 const MENU_SCALES = [1 / 20, 1 / 50, 1 / 100, 1 / 200];
 
@@ -141,7 +150,6 @@ const UPPER = 5; // B on the right, Y on the left
 interface Hand {
 	ray: Group;
 	source: XRInputSource | null;
-	line: Line;
 	pressed: boolean[];
 	/** Which way the stick was last pushed past the snap-turn threshold. */
 	flick: -1 | 0 | 1;
@@ -149,7 +157,7 @@ interface Hand {
 }
 
 type Hit =
-	| { kind: 'panel'; panel: Panel; control: Control | null; distance: number }
+	| { kind: 'panel'; panel: Panel; distance: number }
 	| { kind: 'note'; id: string; distance: number }
 	| { kind: 'model'; point: Vector3; normal: Vector3; distance: number };
 
@@ -199,9 +207,11 @@ export class Viewer {
 	private readonly hands: Hand[] = [];
 	private readonly arc: Line;
 	private readonly marker: Mesh;
-	private readonly menu = new Panel(1024, 800, 0.52);
-	private readonly keyboard = new Panel(1024, 684, 0.62);
-	private readonly toast = new Panel(1024, 120, 0.36);
+	private readonly menu = new Panel(1024, 800, 0.52, (id) => this.press(this.menu, id));
+	private readonly keyboard = new Panel(1024, 684, 0.62, (id) => this.press(this.keyboard, id));
+	private readonly toast = new Panel(1024, 120, 0.36, () => {});
+	/** Controllers and hands drawn, and pointer events for the panels: @pmndrs/xr. */
+	private readonly xr: ReturnType<typeof createXRStore>;
 	private grid: GridHelper | null = null;
 	private gridSpec: { size: number; cells: number; at: Vector3 } | null = null;
 	private backdrop: Backdrop = 'white';
@@ -240,6 +250,10 @@ export class Viewer {
 		// The floor of the room is y = 0 of the play space, so a teleport can
 		// put it on a floor of the model and heights come out right.
 		renderer.xr.setReferenceSpaceType('local-floor');
+		// What @pmndrs/uikit's panels need: clipping for rounded corners and
+		// overflow, and transparent parts drawn back to front in a stable order.
+		renderer.localClippingEnabled = true;
+		renderer.setTransparentSort(reversePainterSortStable);
 		this.renderer = renderer;
 		const canvas = renderer.domElement;
 		canvas.setAttribute('role', 'img');
@@ -294,6 +308,42 @@ export class Viewer {
 
 		for (let i = 0; i < 2; i++) this.hands.push(this.makeHand(i));
 
+		/*
+		 * @pmndrs/xr draws the controllers as the Quest's own models and
+		 * tracked hands as hands, with a ray and a cursor, and turns trigger,
+		 * pinch and fingertip into pointer events for the panels. Moving,
+		 * grabbing, notes and drawing stay this file's own, read from the
+		 * same input sources. Models come from this origin
+		 * (scripts/xr-assets.mjs): its default CDN is refused by the CSP.
+		 * Squeeze is the world grab here, so its grab pointer is off; no
+		 * emulator is injected — the tests bring their own.
+		 */
+		this.xr = createXRStore(canvas, this.scene, () => this.camera, renderer.xr, {
+			emulate: false,
+			offerSession: false,
+			enterGrantedSession: false,
+			htmlInput: false,
+			baseAssetPath: new URL('/xr/profiles/', location.href).href,
+			controller: {
+				grabPointer: false,
+				teleportPointer: false,
+				rayPointer: {
+					...PRESS,
+					rayModel: { color: hex.ray, opacity: 0.6 },
+					cursorModel: { color: hex.accent }
+				}
+			},
+			hand: {
+				grabPointer: false,
+				teleportPointer: false,
+				rayPointer: { ...PRESS, cursorModel: { color: hex.accent } },
+				touchPointer: { ...PRESS, cursorModel: { color: hex.accent } }
+			},
+			gaze: false,
+			screenInput: false,
+			transientPointer: false
+		});
+
 		renderer.xr.addEventListener('sessionstart', () => this.sessionStarted());
 		renderer.xr.addEventListener('sessionend', () => this.sessionEnded());
 
@@ -314,7 +364,7 @@ export class Viewer {
 		// Labels drawn before IBM Plex arrived are drawn again once it has.
 		document.fonts?.ready.then(() => this.markers.refresh());
 
-		renderer.setAnimationLoop((time) => this.frame(time));
+		renderer.setAnimationLoop((time, frame) => this.frame(time, frame));
 	}
 
 	// ── What the page tells the viewer ─────────────────────────────────────
@@ -522,6 +572,7 @@ export class Viewer {
 		this.resizeObserver.disconnect();
 		this.setModel(null);
 		this.controls.dispose();
+		this.xr.destroy();
 		this.menu.dispose();
 		this.keyboard.dispose();
 		this.toast.dispose();
@@ -531,12 +582,15 @@ export class Viewer {
 
 	// ── The frame ──────────────────────────────────────────────────────────
 
-	private frame(time: number) {
+	private frame(time: number, frame?: XRFrame) {
 		const dt = Math.min(0.1, Math.max(0, (time - this.lastTime) / 1000));
 		this.lastTime = time;
 
-		if (this.presenting) this.updateXR(dt, time);
-		else this.controls.update(dt);
+		if (this.presenting) {
+			this.xr.update(frame, dt);
+			this.updateXR(dt, time);
+			for (const panel of [this.menu, this.keyboard, this.toast]) panel.update(dt * 1000);
+		} else this.controls.update(dt);
 
 		this.markers.resize(this.camera.getWorldPosition(new Vector3()), this.world.scale.x);
 		this.renderer.render(this.scene, this.camera);
@@ -819,26 +873,6 @@ export class Viewer {
 		const left = this.hands.find((h) => h.source?.handedness === 'left');
 		const right = this.hands.find((h) => h.source?.handedness === 'right');
 
-		let menuHover: string | null = null;
-		let keyHover: string | null = null;
-		for (const hand of this.hands) {
-			if (!hand.source || hand.source.targetRayMode !== 'tracked-pointer') {
-				hand.line.visible = false;
-				continue;
-			}
-			hand.line.visible = !hand.aiming;
-			// The model is tested for the pointing hand only: it's the costly
-			// one, and the line's length is the only thing it's needed for here.
-			const hit = this.pick(hand, hand === right || !right);
-			hand.line.scale.z = hit ? Math.min(hit.distance, 20) : 5;
-			if (hit?.kind === 'panel' && hit.control) {
-				if (hit.panel === this.menu) menuHover = hit.control.id;
-				else keyHover = hit.control.id;
-			}
-		}
-		this.menu.setHover(menuHover);
-		this.keyboard.setHover(keyHover);
-
 		this.updateGrab();
 
 		if (right) this.rightStick(right);
@@ -857,32 +891,17 @@ export class Viewer {
 	}
 
 	private makeHand(index: number): Hand {
+		// three.js's own controller objects, for the ray this file points
+		// with; what's drawn in the hand is @pmndrs/xr's (the constructor).
 		const ray = this.renderer.xr.getController(index);
-		const line = new Line(
-			new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -1)]),
-			new LineBasicMaterial({ color: hex.ray, transparent: true, opacity: 0.6 })
-		);
-		line.visible = false;
-		ray.add(line);
+		this.dolly.add(ray);
 
-		// No controller models: three.js would fetch them from a CDN, which the
-		// security policy refuses, and a plain grip reads fine in the hand.
-		const grip = this.renderer.xr.getControllerGrip(index);
-		const handle = new Mesh(
-			new BoxGeometry(0.03, 0.03, 0.11),
-			new MeshBasicMaterial({ color: hex.grip })
-		);
-		handle.position.z = 0.02;
-		grip.add(handle);
-		this.dolly.add(ray, grip);
-
-		const hand: Hand = { ray, source: null, line, pressed: [], flick: 0, aiming: false };
+		const hand: Hand = { ray, source: null, pressed: [], flick: 0, aiming: false };
 		ray.addEventListener('connected', (e) => {
 			hand.source = (e as unknown as { data: XRInputSource }).data;
 		});
 		ray.addEventListener('disconnected', () => {
 			hand.source = null;
-			hand.line.visible = false;
 		});
 		// Trigger on a controller, pinch on a tracked hand: both arrive as select.
 		ray.addEventListener('selectstart', () => this.select(hand));
@@ -913,9 +932,8 @@ export class Viewer {
 		// Panels are drawn over everything, so they win over anything nearer.
 		for (const panel of [this.keyboard, this.menu]) {
 			if (!panel.mesh.visible) continue;
-			const [hit] = this.raycaster.intersectObject(panel.mesh, false);
-			if (hit?.uv)
-				return { kind: 'panel', panel, control: panel.at(hit.uv), distance: hit.distance };
+			const [hit] = this.raycaster.intersectObject(panel.target, true);
+			if (hit) return { kind: 'panel', panel, distance: hit.distance };
 		}
 		return this.hitScene(withModel);
 	}
@@ -936,11 +954,10 @@ export class Viewer {
 
 	private select(hand: Hand) {
 		const hit = this.pick(hand);
+		// A panel's button is pressed by the pointer events @pmndrs/xr sends
+		// it (ui.ts); here, a pull aimed at a panel only gets felt.
 		if (hit?.kind === 'panel') {
-			if (hit.control) {
-				this.buzz(hand, 0.25, 15);
-				this.press(hit.panel, hit.control.id);
-			}
+			this.buzz(hand, 0.25, 15);
 			return;
 		}
 		if (hit?.kind === 'note') {
@@ -1597,7 +1614,7 @@ export class Viewer {
 				weight: 700,
 				tone: 'note'
 			},
-			{ text: (e.text || '') + '▏', x: pad + 28, y: 148, size: 42 }
+			{ text: (e.text || '') + '|', x: pad + 28, y: 148, size: 42 }
 		]);
 	}
 

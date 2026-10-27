@@ -1,21 +1,11 @@
-import {
-	CanvasTexture,
-	DoubleSide,
-	Mesh,
-	MeshBasicMaterial,
-	PlaneGeometry,
-	SRGBColorSpace,
-	Sprite,
-	SpriteMaterial,
-	type Vector2
-} from 'three';
+import { CanvasTexture, SRGBColorSpace, Sprite, SpriteMaterial } from 'three';
 import { theme } from './theme';
 import { icons, type CarbonNode, type IconName } from '$lib/icons';
 
-// Flat UI inside the headset: a canvas drawn with the 2D API and shown as a
-// texture on a plane. DOM overlays don't exist in an immersive VR session,
-// and a canvas is the whole of what's needed for buttons and a keyboard —
-// no UI library, no text-rendering dependency.
+// What a headset panel shows, as data: buttons and lines of text placed in
+// pixels on a fixed-size panel, the way a designer lays out a frame. ui.ts
+// draws it with @pmndrs/uikit; this file holds the description, the pure
+// layout helpers, and the canvas drawing the note labels still use.
 
 export interface Control {
 	id: string;
@@ -47,155 +37,30 @@ export interface TextLine {
 	weight?: number;
 }
 
-/** The control under a point on the canvas, in canvas pixels. */
-export function controlAt(controls: Control[], x: number, y: number): Control | null {
-	return (
-		controls.find(
-			(c) =>
-				!c.disabled &&
-				c.variant !== 'field' &&
-				x >= c.x &&
-				x <= c.x + c.w &&
-				y >= c.y &&
-				y <= c.y + c.h
-		) ?? null
-	);
+/**
+ * Where a line of text sits on a panel `width` pixels wide: its box, in the
+ * panel's pixels from the top left. A TextLine is placed the way a canvas
+ * places text — `x` is where the alignment anchors, `y` the middle of the
+ * line — and a box keeps 40 px clear of the panel's sides.
+ */
+export function lineBox(line: TextLine, width: number) {
+	const margin = 40;
+	const height = Math.round(line.size * 1.4);
+	const top = Math.round(line.y - height / 2);
+	const align = line.align ?? 'left';
+	if (align === 'right') return { left: margin, top, width: line.x - margin, height };
+	if (align === 'center') {
+		const half = Math.min(line.x, width - line.x) - margin;
+		return { left: line.x - half, top, width: 2 * half, height };
+	}
+	return { left: line.x, top, width: width - margin - line.x, height };
 }
 
 const TONES = { dim: theme.dim, accent: theme.accent, note: theme.note } as const;
 
-export class Panel {
-	readonly mesh: Mesh<PlaneGeometry, MeshBasicMaterial>;
-	readonly width: number;
-	readonly height: number;
-	private readonly ctx: CanvasRenderingContext2D;
-	private readonly texture: CanvasTexture;
-	private controls: Control[] = [];
-	private lines: TextLine[] = [];
-	private hover: string | null = null;
-
-	constructor(width: number, height: number, metres: number) {
-		this.width = width;
-		this.height = height;
-		const canvas = document.createElement('canvas');
-		canvas.width = width;
-		canvas.height = height;
-		this.ctx = canvas.getContext('2d')!;
-		this.texture = new CanvasTexture(canvas);
-		this.texture.colorSpace = SRGBColorSpace;
-		this.mesh = new Mesh(
-			new PlaneGeometry(metres, (metres * height) / width),
-			new MeshBasicMaterial({
-				map: this.texture,
-				transparent: true,
-				side: DoubleSide,
-				toneMapped: false,
-				// Drawn over the model: a menu that a wall can cut in half is a
-				// menu that can't be closed.
-				depthTest: false
-			})
-		);
-		this.mesh.renderOrder = 10;
-		this.mesh.visible = false;
-		// Drawn again once IBM Plex has loaded: a canvas paints with whatever
-		// font is ready at that moment, and the first draw can beat it.
-		document.fonts?.ready.then(() => this.draw());
-	}
-
-	set(controls: Control[], lines: TextLine[]) {
-		this.controls = controls;
-		this.lines = lines;
-		this.draw();
-	}
-
-	setHover(id: string | null) {
-		if (id === this.hover) return;
-		this.hover = id;
-		this.draw();
-	}
-
-	at(uv: Vector2): Control | null {
-		return controlAt(this.controls, uv.x * this.width, (1 - uv.y) * this.height);
-	}
-
-	private draw() {
-		const { ctx, width, height } = this;
-		ctx.clearRect(0, 0, width, height);
-		ctx.fillStyle = theme.panel;
-		roundRect(ctx, 1, 1, width - 2, height - 2, 32);
-		ctx.fill();
-		ctx.strokeStyle = theme.line;
-		ctx.lineWidth = 2;
-		ctx.stroke();
-
-		ctx.textBaseline = 'middle';
-		for (const c of this.controls) {
-			if (c.variant === 'field') {
-				ctx.fillStyle = '#07090c';
-				roundRect(ctx, c.x, c.y, c.w, c.h, 18);
-				ctx.fill();
-				ctx.strokeStyle = theme.accent;
-				ctx.lineWidth = 3;
-				ctx.stroke();
-				continue;
-			}
-			const hover = c.id === this.hover && !c.disabled;
-			const on = c.active || c.variant === 'primary';
-			ctx.globalAlpha = c.disabled ? 0.35 : 1;
-
-			ctx.fillStyle = on
-				? theme.accent
-				: c.variant === 'danger'
-					? theme.dangerSoft
-					: hover
-						? theme.hover
-						: theme.surface;
-			roundRect(ctx, c.x, c.y, c.w, c.h, 18);
-			ctx.fill();
-			// The ray's target gets an accent ring, so where it points is never
-			// a guess — the one cue a pointer at a picture has.
-			if (hover) {
-				ctx.strokeStyle = on ? theme.text : theme.accent;
-				ctx.lineWidth = 3;
-				ctx.stroke();
-			}
-
-			ctx.fillStyle = on ? theme.accentInk : c.variant === 'danger' ? theme.danger : theme.text;
-			ctx.textAlign = 'center';
-			ctx.font = `600 ${Math.round(Math.min(c.h * 0.4, 36))}px ${theme.font}`;
-			const iconSize = Math.round(Math.min(c.h * 0.42, 40));
-			const label = fit(ctx, c.label, c.w - 20 - (c.icon ? iconSize + 12 : 0));
-			const textWidth = label ? ctx.measureText(label).width : 0;
-			const gap = c.icon && label ? 12 : 0;
-			const total = (c.icon ? iconSize : 0) + gap + textWidth;
-			let x = c.x + (c.w - total) / 2;
-			const cy = c.y + c.h / 2;
-			if (c.icon) {
-				drawIcon(ctx, c.icon, x, cy - iconSize / 2, iconSize);
-				x += iconSize + gap;
-			}
-			if (label) {
-				ctx.textAlign = 'left';
-				ctx.fillText(label, x, cy + 1);
-			}
-			ctx.globalAlpha = 1;
-		}
-
-		for (const l of this.lines) {
-			ctx.fillStyle = l.tone ? TONES[l.tone] : theme.text;
-			ctx.textAlign = l.align ?? 'left';
-			ctx.font = `${l.weight ?? 500} ${l.size}px ${l.mono ? theme.mono : theme.font}`;
-			ctx.fillText(fit(ctx, l.text, width - 2 * 40), l.x, l.y);
-		}
-
-		this.texture.needsUpdate = true;
-	}
-
-	dispose() {
-		this.texture.dispose();
-		this.mesh.geometry.dispose();
-		this.mesh.material.dispose();
-	}
+/** A TextLine's colour. */
+export function toneOf(line: TextLine): string {
+	return line.tone ? TONES[line.tone] : theme.text;
 }
 
 /** A text label that always faces the viewer, for a note pinned in the model. */

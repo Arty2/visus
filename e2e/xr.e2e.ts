@@ -104,6 +104,60 @@ test('X places a note where the right hand points', async ({ page }) => {
 	expect(errors).toEqual([]);
 });
 
+/**
+ * Aims the right controller, from 0.3 m behind, at a point on a panel given
+ * in the panel's pixels. Panels are placed in front of a head at the start
+ * pose, (0, 1.6, 0) looking down −z: `distance` ahead, `drop` below the
+ * eye, tilted back 0.3 rad (viewer.ts, placePanel), so its lower half is
+ * nearer. Pointing straight down −z keeps x and y, so the ray meets the
+ * panel at exactly the point — from 0.3 m, outside the 0.2 m within which
+ * a ray pointer ignores what it touches.
+ */
+async function aimAtPanel(
+	page: Page,
+	panel: { metres: number; width: number; height: number; distance: number; drop: number },
+	px: number,
+	py: number
+) {
+	const x = (px / panel.width - 0.5) * panel.metres;
+	const y = (0.5 - py / panel.height) * ((panel.metres * panel.height) / panel.width);
+	const at = [x, 1.6 - panel.drop + y * Math.cos(0.3), -panel.distance - y * Math.sin(0.3)];
+	await page.evaluate(([x, y, z]) => {
+		const right = (globalThis as any).__xr.controllers.right; // eslint-disable-line @typescript-eslint/no-explicit-any
+		right.position.set(x, y, z + 0.3);
+		right.quaternion.set(0, 0, 0, 1);
+	}, at);
+	await frames(page);
+}
+
+// The keyboard opened by a new note: 1024 × 684 px, 0.62 m wide.
+const KEYBOARD = { metres: 0.62, width: 1024, height: 684, distance: 0.5, drop: 0.35 };
+
+test('the headset keyboard writes a note', async ({ page }) => {
+	const errors = collectErrors(page);
+	await enterVR(page);
+	await page.evaluate(() => {
+		const right = (globalThis as any).__xr.controllers.right; // eslint-disable-line @typescript-eslint/no-explicit-any
+		right.position.set(0.2, 1.3, -0.3);
+		right.quaternion.set(Math.sin(-0.3), 0, 0, Math.cos(-0.3));
+	});
+	await frames(page);
+	await press(page, 'left', 'x-button');
+	await expect(page.locator('.note-text')).toHaveCount(1);
+
+	// Keys are 88.6 px wide with 10 px between (viewer.ts, drawKeyboard).
+	// A new note starts shifted: W, then lower-case e, then Save.
+	await aimAtPanel(page, KEYBOARD, 166.9, 347);
+	await press(page, 'right', 'trigger');
+	await aimAtPanel(page, KEYBOARD, 267.6, 347);
+	await press(page, 'right', 'trigger');
+	await aimAtPanel(page, KEYBOARD, 857, 623);
+	await press(page, 'right', 'trigger');
+
+	await expect(page.locator('.note-text')).toHaveValue('We');
+	expect(errors).toEqual([]);
+});
+
 test('grips scale the model, and the stick teleports and turns, without errors', async ({
 	page
 }) => {
@@ -170,6 +224,10 @@ test('grips scale the model, and the stick teleports and turns, without errors',
  * a second, and the app's step is capped at 0.1 s a frame.
  */
 test('walking is carried up onto the plinth and stopped by the wall', async ({ page }) => {
+	// Four minutes: it waits on 50 rendered frames of walking, and with the
+	// headset panels and pointers drawn too, a software renderer under a full
+	// parallel run took more than two.
+	test.setTimeout(240_000);
 	const errors = collectErrors(page);
 	await enterVR(page);
 	await press(page, 'right', 'b-button'); // B from nothing: the last view, Bench
@@ -238,6 +296,45 @@ test('Draw on the headset menu turns the trigger into a pen', async ({ page }) =
 	}
 	await page.evaluate(`__xr.controllers.right.updateButtonValue('trigger', 0)`);
 	await frames(page);
+
+	await expect(page.locator('.sketch-row span')).toHaveText('1 sketch');
+	expect(errors).toEqual([]);
+});
+
+// The same, with tracked hands instead of controllers: a pinch is the
+// trigger, and the hand models load from this origin without errors.
+test('a pinch presses the menu and draws, with tracked hands', async ({ page }) => {
+	const errors = collectErrors(page);
+	await enterVR(page);
+	await page.evaluate(`__xr.primaryInputMode = 'hand'`);
+	await frames(page, 5);
+	const pinch = async (value: number) => {
+		await page.evaluate(`__xr.hands.right.updatePinchValue(${value})`);
+		await frames(page);
+	};
+	await page.evaluate(`{
+		const right = __xr.hands.right;
+		right.position.set(-0.061, 1.3194, -0.2);
+		right.quaternion.set(0, 0, 0, 1);
+	}`);
+	await frames(page);
+	await pinch(1);
+	await pinch(0);
+
+	await page.evaluate(`{
+		const right = __xr.hands.right;
+		right.position.set(0.3, 1.1, -0.3);
+		right.quaternion.set(-0.2, 0, 0, 0.98);
+	}`);
+	await frames(page);
+	await pinch(1);
+	for (let i = 1; i <= 6; i++) {
+		await page.evaluate(
+			`__xr.hands.right.position.set(${0.3 - i * 0.05}, ${1.1 + i * 0.02}, -0.3)`
+		);
+		await frames(page, 2);
+	}
+	await pinch(0);
 
 	await expect(page.locator('.sketch-row span')).toHaveText('1 sketch');
 	expect(errors).toEqual([]);

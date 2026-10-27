@@ -25,6 +25,5 @@ export const hex = {
 	danger: 0xff6b6b,
 	note: 0xbe95ff,
 	noteDone: 0x5d6a79,
-	ray: 0xffd2b0,
-	grip: 0x1a222c
+	ray: 0xffd2b0
 } as const;

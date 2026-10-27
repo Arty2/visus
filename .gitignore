@@ -34,3 +34,5 @@ playwright-report
 
 # Copied from three.js at install by scripts/decoders.sh, never committed.
 /static/decoders
+# Controller models and IBM Plex for the headset, copied by scripts/xr-assets.mjs.
+/static/xr

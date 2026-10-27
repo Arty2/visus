@@ -6,9 +6,9 @@ heading to the new number and adds its lines there, never a section of its own.
 Features only — not fixes, not why, not how; that is the README's. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
-## 0.2.0 — 2026-10-27
+## 0.2.1 — 2026-10-27
 
-- Walking at life size follows floors and stairs; controllers buzz to confirm.
+- Your Quest controllers and hands in VR, sharper menus; walking follows floors and stairs.
 - Large models are optimised as they open, so they run smoothly in the headset.
 - Opens FBX, OBJ, PLY, compressed glTF and Gaussian splat scans, and installs as an app that works offline.
 - Sketch over the model — pen, lines, arrows, rectangles, ellipses — on screen or in the air.

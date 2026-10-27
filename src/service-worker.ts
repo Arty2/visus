@@ -10,7 +10,8 @@
  * the CSP), so a service worker needs nothing loosened.
  *
  * Everything the app is — the page, its scripts and styles, the fonts, the
- * decoders, the icons — is cached on install, keyed by build version, and
+ * decoders, the icons — is cached on install (all but the headset's
+ * controller models, below), keyed by build version, and
  * served from the cache first: it can't change until the next deploy, which
  * brings a new cache and drops the old. Anything else (nothing, today: the
  * app makes no requests of its own) goes to the network, falling back to
@@ -21,7 +22,11 @@ import { build, files, prerendered, version } from '$service-worker';
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `visus-${version}`;
-const APP = new Set([...build, ...files, ...prerendered]);
+// The controller and hand models (static/xr, ~8 MB, scripts/xr-assets.mjs)
+// are left out of the install: a desktop visitor never needs them, and a
+// headset fetches only its own. They're kept as they're first fetched.
+const ON_DEMAND = '/xr/';
+const APP = new Set([...build, ...files.filter((f) => !f.startsWith(ON_DEMAND)), ...prerendered]);
 
 worker.addEventListener('install', (event) => {
 	event.waitUntil(
@@ -54,6 +59,13 @@ worker.addEventListener('fetch', (event) => {
 			if (APP.has(url.pathname)) {
 				const hit = await cache.match(url.pathname);
 				if (hit) return hit;
+			}
+			if (url.pathname.startsWith(ON_DEMAND)) {
+				const kept = await cache.match(url.pathname);
+				if (kept) return kept;
+				const response = await fetch(request);
+				if (response.ok) await cache.put(url.pathname, response.clone());
+				return response;
 			}
 			try {
 				return await fetch(request);

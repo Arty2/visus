@@ -378,6 +378,12 @@ one, and what it replaced:
 | `bits-ui`                                                         | Headless, accessible dialogs, tooltips, a toggle group and a switch, styled by `app.css`         | Native `<dialog>`, `title` attributes, a hand-drawn checkbox switch |
 | `yjs`                                                             | A model's notes, views and sketches as a CRDT: merging imports, multi-step undo                  | Plain lists in localStorage; one snapshot of undo                   |
 | `@sparkjsdev/spark`                                               | Gaussian splat scans (World Labs' renderer): decoding, sorting, drawing in both eyes, raycasting | —                                                                   |
+| `@pmndrs/xr`                                                      | The Quest's controllers and tracked hands drawn, rays and cursors, pointer events in VR          | Grey boxes for controllers; a hand-written ray test per panel       |
+| `@pmndrs/uikit`                                                   | The headset's menu, keyboard and toast: flexbox layout, distance-field text in IBM Plex          | Canvas textures drawn with the 2D API                               |
+
+Dev-only, never shipped: `@ibm/plex-sans` (the TrueType source for
+`scripts/fonts.mjs`; like Carbon's, its install telemetry stays off) and
+`@webxr-input-profiles/assets` (copied in part by `scripts/xr-assets.mjs`).
 
 **glTF-Transform without its pixel tools.** Its functions package imports
 `ndarray-pixels` and `ndarray-lanczos` for texture work, and `ndarray-ops`
@@ -460,9 +466,12 @@ parsers. Writing those by hand is a project of its own, and the alternatives
 is imported from `src/routes/+page.svelte` after first paint, so the page
 arrives fast. Held back on purpose, and what would end it:
 
-- **Controller models** (`XRControllerModelFactory`) fetch from a CDN, which
-  `connect-src 'self'` refuses; a plain grip box is drawn instead. Vendoring
-  the Quest's two controller meshes into `static/` would end that.
+- **@pmndrs/xr's session and locomotion helpers.** It draws the controllers
+  and hands and delivers pointer events (below), but the session is still
+  requested here and every move is still `rig.ts` and `viewer.ts`: walking
+  on floors, the teleport arc and grab-to-scale are tested and specific to
+  a building at 1:1, where its generic locomotion is not. A move that its
+  helpers did better would end that.
 
 **How it moves you.** The headset owns the head's pose inside the play
 space; the app owns only where the play space — the _dolly_ — sits, and how
@@ -495,9 +504,39 @@ the canvas on a screen and one eye's framebuffer in VR. The geometry —
 stroke simplification, shapes on a surface's plane, arrowheads — is
 `sketch.ts`, with tests.
 
-**Text entry** inside an immersive session is the app's own job — there is
-no system keyboard and no DOM overlay in `immersive-vr` — so menus and the
-keyboard are canvases drawn with the 2D API on planes (`panel.ts`).
+**Inside the headset, @pmndrs/xr and @pmndrs/uikit.** There's no DOM in an
+`immersive-vr` session and no system keyboard, so the menu, the keyboard
+and the toast are the app's own. `panel.ts` describes them as data —
+buttons and lines of text placed in pixels on a fixed-size panel — and
+`ui.ts` draws that with uikit: layout, rounded corners and borders as
+geometry, and text as signed-distance glyphs, sharp at any distance where
+the canvas textures they replaced blurred. @pmndrs/xr (`createXRStore`)
+draws the controllers as the Quest's own models and tracked hands as hands,
+with a ray and cursor each, and turns the trigger, a pinch and a fingertip
+into pointer events, so panels respond to all three the same way. Three
+things had to be settled for the security policy:
+
+- **Fonts.** uikit can turn a TrueType file into a distance-field atlas in
+  the browser, but its generator is Emscripten code that compiles
+  JavaScript from strings, which the CSP refuses. `scripts/fonts.mjs`
+  renders IBM Plex (Sans 400/600/700, Mono 500) ahead of time in
+  Playwright's Chromium, and `static/msdf/` is committed. Run it again only
+  to change the glyphs or the weights; anything outside its character set
+  (Latin-1, Greek, the punctuation used) shows as a box.
+- **Controller and hand models** come from `@webxr-input-profiles/assets`,
+  copied at install into `static/xr/profiles/` (`scripts/xr-assets.mjs`,
+  gitignored) instead of the CDN @pmndrs/xr defaults to. Only the Quest's
+  profiles and the generic fallbacks, about 8 MB, which the service worker
+  caches as they're fetched rather than on install.
+- **Icons** are Carbon's, drawn to small canvas textures (`ui.ts`): uikit's
+  own SVG component parses markup with `DOMParser`, a Trusted Types sink.
+
+Two settings matter to anyone changing them: a press counts as a click
+however long it's held (`PRESS` in `viewer.ts`; the default 300 ms misses a
+deliberate trigger pull), and panels have `pointerEventsOrder: 2` and
+`depthTest: false`, so they're drawn over the model and take the pointer
+from anything behind them. A ray pointer ignores what is closer than
+0.2 m; a fingertip is the way to touch something that near.
 
 **COLLADA under Trusted Types.** `ColladaLoader` parses with
 `DOMParser.parseFromString`, which `require-trusted-types-for 'script'`
