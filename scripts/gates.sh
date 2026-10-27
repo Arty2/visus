@@ -55,6 +55,19 @@ else
 	pass "no markup or script sinks in src/" "no-injection-sinks"
 fi
 
+# ── 1b. One Trusted Types policy, in one place ─────────────────────────────
+# A policy is a way round the injection-sink rule above: whatever it blesses,
+# the browser lets through. visus has exactly one, which passes only its own
+# blob: Worker URLs (see the file). A second would deserve the same scrutiny,
+# so it can't arrive without this gate being edited to let it.
+policies=$(grep -rn 'createPolicy' src 2>/dev/null | grep -v '^src/lib/trusted-types.ts:')
+
+if [ -n "$policies" ]; then
+	fail "Trusted Types policy outside src/lib/trusted-types.ts" "$policies" "one-trusted-types-policy"
+else
+	pass "Trusted Types policies only in src/lib/trusted-types.ts" "one-trusted-types-policy"
+fi
+
 # ── 2. No secret-shaped name is exposed to the browser ───────────────────────
 # $env/static/public and any PUBLIC_ variable are inlined into the client
 # bundle. A name that reads as a token, secret or key is a shipped secret the

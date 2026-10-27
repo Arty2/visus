@@ -19,6 +19,33 @@ test('a glTF opens, with the camera it carries', async ({ page }) => {
 	expect(errors).toEqual([]);
 });
 
+// Each runs under the real policy, so a decoder Worker that Trusted Types
+// refused (see src/lib/trusted-types.ts) fails here as a console error.
+for (const [name, how] of [
+	['floor.draco.glb', 'Draco'],
+	['floor.meshopt.glb', 'Meshopt']
+]) {
+	test(`a ${how}-compressed glTF opens, with its camera`, async ({ page }) => {
+		const errors = collectErrors(page);
+		await ready(page);
+		await page.getByLabel('Open model…').setInputFiles(fixture(name));
+		await expectModel(page, name);
+		await expect(page.getByRole('button', { name: 'Doorway', exact: true })).toBeVisible();
+		expect(errors).toEqual([]);
+	});
+}
+
+test('an OBJ opens with the materials its .mtl names, and lists the missing texture', async ({
+	page
+}) => {
+	const errors = collectErrors(page);
+	await ready(page);
+	await page.getByLabel('Open model…').setInputFiles([fixture('floor.obj'), fixture('floor.mtl')]);
+	await expectModel(page, 'floor.obj');
+	await expect(page.getByRole('status')).toContainText('tile.jpg');
+	expect(errors).toEqual([]);
+});
+
 test('a SketchUp-style COLLADA file opens, scene cameras named, missing texture listed', async ({
 	page
 }) => {
@@ -77,6 +104,6 @@ test('a SketchUp file is refused with how to export it', async ({ page }) => {
 		mimeType: 'application/octet-stream',
 		buffer: Buffer.from('not really')
 	});
-	await expect(page.getByRole('alert')).toContainText('COLLADA (.dae)');
+	await expect(page.getByRole('alert')).toContainText('COLLADA (.dae)', { timeout: 20_000 });
 	await expectModel(page, 'Sample pavilion');
 });

@@ -81,6 +81,10 @@
 			});
 			created.notesById = (id) => notesStore.annotations.find((a) => a.id === id);
 			viewer = created;
+			// Fetched now, while the person looks at the sample, rather than on
+			// their first Open: five formats and three decoders are a large
+			// module, and waiting for it after choosing a file feels broken.
+			void import('$lib/viewer/load');
 			await openSample();
 
 			const recent = await recallFiles();
@@ -123,7 +127,7 @@
 	}
 
 	async function openFiles(files: File[], remember: boolean) {
-		if (!files.length) return;
+		if (!files.length || !viewer) return;
 		loading = true;
 		loadError = '';
 		try {
@@ -131,7 +135,7 @@
 				import('$lib/viewer/load'),
 				import('$lib/viewer/recent')
 			]);
-			const model = await loadFiles(files);
+			const model = await loadFiles(files, viewer.gl);
 			show(model.root, model.name, model.key, model.views, model.missing);
 			if (remember) {
 				await rememberFiles(files);

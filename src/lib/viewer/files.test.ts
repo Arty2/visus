@@ -12,6 +12,11 @@ describe('pickMain', () => {
 		expect(pickMain(files)?.format).toBe('glb');
 	});
 
+	it('reads OBJ and FBX, and takes an OBJ over its .mtl', () => {
+		expect(pickMain([{ name: 'a.mtl' }, { name: 'a.obj' }])?.format).toBe('obj');
+		expect(pickMain([{ name: 'chair.FBX' }])?.format).toBe('fbx');
+	});
+
 	it('reports nothing rather than guessing', () => {
 		expect(pickMain([{ name: 'house.skp' }, { name: 'notes.md' }])).toBeNull();
 	});

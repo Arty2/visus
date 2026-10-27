@@ -31,3 +31,6 @@ playwright-report
 # artifact or upload it anywhere: the whole point is that it stays on the
 # machine that produced it.
 /.claude/logs
+
+# Copied from three.js at install by scripts/decoders.sh, never committed.
+/static/decoders

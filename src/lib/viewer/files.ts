@@ -3,11 +3,12 @@
 // file — a .gltf with its .bin and textures, a SketchUp .dae with a folder of
 // images — and the browser hands them over flat, folders gone.
 
-export type Format = 'glb' | 'gltf' | 'dae';
+export type Format = 'glb' | 'gltf' | 'fbx' | 'dae' | 'obj';
 
 // Preferred in this order when several are picked together: binary glTF is
-// self-contained, so it's the least likely to be missing a part.
-const FORMATS: Format[] = ['glb', 'gltf', 'dae'];
+// self-contained, so it's the least likely to be missing a part; OBJ last,
+// as the format that carries least (no cameras, no units).
+const FORMATS: Format[] = ['glb', 'gltf', 'fbx', 'dae', 'obj'];
 
 export function extension(name: string): string {
 	const dot = name.lastIndexOf('.');

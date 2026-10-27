@@ -1,6 +1,13 @@
-import { LoadingManager, type Object3D } from 'three';
+import { LoadingManager, type Object3D, type WebGLRenderer } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { allowOwnBlobWorkers } from '$lib/trusted-types';
 import { modelKey } from '$lib/store/notes';
 import { extension, isImage, pickMain, resourceKey } from './files';
 import { camerasIn, type ViewTarget } from './views';
@@ -23,14 +30,18 @@ const BLANK =
 
 let live: string[] = [];
 
-export async function loadFiles(files: File[]): Promise<LoadedModel> {
+/**
+ * `renderer` is needed only to ask which compressed texture formats the GPU
+ * takes, so KTX2 textures are transcoded to one it can use.
+ */
+export async function loadFiles(files: File[], renderer: WebGLRenderer): Promise<LoadedModel> {
 	const main = pickMain(files);
 	if (!main) {
 		const skp = files.some((f) => extension(f.name) === 'skp');
 		throw new Error(
 			skp
 				? 'SketchUp files can’t be opened directly. In SketchUp, use File → Export → 3D Model and choose COLLADA (.dae) or glTF (.glb).'
-				: 'Choose a .glb, .gltf or .dae file (with its textures, if it has any).'
+				: 'Choose a .glb, .gltf, .fbx, .dae or .obj file (with its textures, if it has any).'
 		);
 	}
 
@@ -64,16 +75,18 @@ export async function loadFiles(files: File[]): Promise<LoadedModel> {
 
 	if (format === 'dae') {
 		root = await parseCollada(await file.text(), manager);
+	} else if (format === 'fbx') {
+		root = new FBXLoader(manager).parse(await file.arrayBuffer(), '');
+		// FBX counts in centimetres unless its UnitScaleFactor says otherwise
+		// (100 = metres). three.js reads the factor but leaves applying it to
+		// the app; without this, most FBX files open a hundred times too big.
+		const cmPerUnit = Number(root.userData.unitScaleFactor ?? 1) || 1;
+		root.scale.multiplyScalar(cmPerUnit / 100);
+	} else if (format === 'obj') {
+		root = await parseOBJ(await file.text(), files, manager);
 	} else {
-		const loader = new GLTFLoader(manager);
-		const data = format === 'glb' ? await file.arrayBuffer() : await file.text();
-		try {
-			root = (await loader.parseAsync(data, '')).scene;
-		} catch (err) {
-			throw new Error(explainGLTF(err), { cause: err });
-		}
+		root = await parseGLTF(file, format, manager, renderer);
 	}
-
 	return {
 		root,
 		name: file.name,
@@ -83,10 +96,58 @@ export async function loadFiles(files: File[]): Promise<LoadedModel> {
 	};
 }
 
+/*
+ * Compressed glTF — Draco and Meshopt geometry, KTX2 textures — through
+ * three.js's own decoders. Draco and Basis are WebAssembly fetched from
+ * /decoders/ (copied there at install, scripts/decoders.sh) and run in
+ * Workers; Meshopt's is inlined. The decoders use the default loading
+ * manager, not the model's, so their own files are never mistaken for
+ * missing parts of the model.
+ */
+async function parseGLTF(
+	file: File,
+	format: 'glb' | 'gltf',
+	manager: LoadingManager,
+	renderer: WebGLRenderer
+): Promise<Object3D> {
+	allowOwnBlobWorkers();
+	const draco = new DRACOLoader().setDecoderPath('/decoders/draco/');
+	const ktx2 = new KTX2Loader().setTranscoderPath('/decoders/basis/').detectSupport(renderer);
+	const loader = new GLTFLoader(manager)
+		.setDRACOLoader(draco)
+		.setKTX2Loader(ktx2)
+		.setMeshoptDecoder(MeshoptDecoder);
+	const data = format === 'glb' ? await file.arrayBuffer() : await file.text();
+	try {
+		return (await loader.parseAsync(data, '')).scene;
+	} catch (err) {
+		throw new Error(explainGLTF(err), { cause: err });
+	} finally {
+		// Each holds a pool of Workers; a model is opened once, so let them go.
+		draco.dispose();
+		ktx2.dispose();
+	}
+}
+
+/** OBJ, with its materials if the .mtl it names was picked alongside. */
+async function parseOBJ(text: string, files: File[], manager: LoadingManager): Promise<Object3D> {
+	const loader = new OBJLoader(manager);
+	const named = text.match(/^\s*mtllib\s+(.+?)\s*$/m)?.[1];
+	const mtl = named
+		? files.find((f) => resourceKey(f.name) === resourceKey(named))
+		: files.find((f) => extension(f.name) === 'mtl');
+	if (mtl) {
+		const materials = new MTLLoader(manager).parse(await mtl.text(), '');
+		materials.preload();
+		loader.setMaterials(materials);
+	}
+	return loader.parse(text);
+}
+
 function explainGLTF(err: unknown): string {
 	const message = err instanceof Error ? err.message : String(err);
-	if (/draco|meshopt|ktx2|basisu/i.test(message)) {
-		return 'This glTF uses compression visus doesn’t read yet (Draco, Meshopt or KTX2). Export it again without compression.';
+	if (/draco|meshopt|ktx2|basisu|transcoder|decoder/i.test(message)) {
+		return `Couldn’t decompress this glTF (${message}). Try exporting it again without compression.`;
 	}
 	return `Couldn’t read that glTF: ${message}`;
 }

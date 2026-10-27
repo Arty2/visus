@@ -82,3 +82,13 @@ Every canvas test saw nothing until Playwright launched Chromium with
 `--use-angle=swiftshader --enable-unsafe-swiftshader`. osseus's
 `playwright.config.ts` could carry them, commented, for the first project
 that draws.
+
+## 2026-10-27 — "Workers are already allowed" isn't true under Trusted Types
+
+`worker-src blob:` is in osseus's policy so a bundler-inlined Worker needs
+no policy fight — but `require-trusted-types-for 'script'` makes
+`new Worker(url)` demand a TrustedScriptURL, so any library that builds a
+Worker from a string (three.js's Draco and KTX2 decoders here) is refused
+anyway. visus added a `default` policy passing only same-origin `blob:`
+script URLs, plus a gate keeping `createPolicy` to one file. osseus's CSP
+notes promise workers work; they should say what it actually takes.

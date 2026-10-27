@@ -114,7 +114,10 @@ export default defineConfig({
 					// writes, SvelteKit for the service worker registration URL (if
 					// one is ever added). SvelteKit refuses to build without the
 					// second once a worker exists.
-					'trusted-types': ['svelte-trusted-html', 'sveltekit-trusted-url'],
+					// …and `default`, visus's own (src/lib/trusted-types.ts): it lets
+					// three.js's decoders start their Workers from this page's own
+					// blob: URLs, and refuses everything else.
+					'trusted-types': ['svelte-trusted-html', 'sveltekit-trusted-url', 'default'],
 					'upgrade-insecure-requests': true
 				}
 			}

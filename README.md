@@ -16,17 +16,18 @@ Latin _vīsus_ — sight, a vision; also the thing seen.
 
 ## Opening a model
 
-**Open model…** takes `.glb`, `.gltf` and `.dae`. Pick the model and its
-textures together (or the `.gltf` with its `.bin`): the browser hands files
-over without their folders, so visus matches each texture by its file name.
-Anything the model asks for that wasn't picked is listed, and the model is
-shown without it.
+**Open model…** takes `.glb`, `.gltf`, `.fbx`, `.dae` and `.obj`. Pick the
+model and its textures together (or the `.gltf` with its `.bin`, or the
+`.obj` with its `.mtl`): the browser hands files over without their
+folders, so visus matches each texture by its file name. Anything the model
+asks for that wasn't picked is listed, and the model is shown without it.
+Compressed glTF — Draco or Meshopt geometry, KTX2 textures — opens too.
 
-| From      | Export as                                                                                                       |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| SketchUp  | **File → Export → 3D Model → COLLADA (.dae)**. Each Scene becomes a camera; tick _Export texture maps_.         |
-| Blender   | **File → Export → glTF 2.0**, format _glTF Binary (.glb)_, with _Cameras_ ticked. Leave compression off.        |
-| Elsewhere | Anything that writes glTF 2.0 or COLLADA 1.4. Units are read from the file; SketchUp's inches arrive as metres. |
+| From      | Export as                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------- |
+| SketchUp  | **File → Export → 3D Model → COLLADA (.dae)**. Each Scene becomes a camera; tick _Export texture maps_.    |
+| Blender   | **File → Export → glTF 2.0**, format _glTF Binary (.glb)_, with _Cameras_ ticked.                          |
+| Elsewhere | glTF 2.0, FBX, COLLADA 1.4 or OBJ. Units are read from the file where it has them; OBJ is taken as metres. |
 
 `.skp` files can't be read directly — SketchUp's own format isn't open. The
 last model opened is remembered, so after a reload **Reopen** brings it back
@@ -114,9 +115,8 @@ makes no requests beyond loading itself.
 
 ## Limitations
 
-- **Formats**: no `.skp`, `.fbx`, `.obj` or `.ifc`; export to glTF or
-  COLLADA. Compressed glTF (Draco, Meshopt, KTX2 textures) is refused with a
-  message — export without compression.
+- **Formats**: no `.skp`, `.ifc`, `.3dm` or `.usdz`; export to glTF,
+  FBX, COLLADA or OBJ. OBJ carries no cameras and no units.
 - **Size**: a model has to fit in the headset's memory, and every triangle
   is drawn every frame. Large SketchUp exports with dense furniture or
   vegetation may stutter; purge unused components and hide what isn't needed

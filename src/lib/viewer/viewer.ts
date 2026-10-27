@@ -322,6 +322,11 @@ export class Viewer {
 		this.renderer.domElement.classList.toggle('placing', on);
 	}
 
+	/** For loaders that must ask the GPU what it supports (KTX2). */
+	get gl(): WebGLRenderer {
+		return this.renderer;
+	}
+
 	get presenting(): boolean {
 		return this.renderer.xr.isPresenting;
 	}
