@@ -1,0 +1,38 @@
+node_modules
+
+# Output
+.output
+.vercel
+.netlify
+.wrangler
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Playwright
+test-results
+playwright-report
+
+# Local-only, never-synced-anywhere self-improvement log — see
+# AGENTS.md § Self-improving: closing the loop. Never make this a CI
+# artifact or upload it anywhere: the whole point is that it stays on the
+# machine that produced it.
+/.claude/logs
+
+# Copied from three.js at install by scripts/decoders.sh, never committed.
+/static/decoders
+# Controller models and IBM Plex for the headset, copied by scripts/xr-assets.mjs.
+/static/xr

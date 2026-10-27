@@ -1,0 +1,114 @@
+name: CI
+
+# Prose cannot break a build, and README/CLAUDE/TECHNICAL are most of what
+# gets edited without touching app code. CHANGELOG.md is the exception: the
+# app bundles it, and the gates check its top heading against package.json.
+# `paths` rather than `paths-ignore` because only `paths` can re-include a
+# file after excluding its pattern; the last matching line wins.
+on:
+  push:
+    branches: [main]
+    paths: ['**', '!**.md', 'CHANGELOG.md']
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ['**', '!**.md', 'CHANGELOG.md']
+  workflow_dispatch:
+
+# A newer push says everything the older one did. Three tweaks in a row
+# otherwise run three suites to the end, and the one that describes the
+# branch queues behind two that no longer do.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here writes to the repository, so the token can't either.
+permissions:
+  contents: read
+
+# Nothing deploys from Actions — Vercel's Git integration handles previews
+# and production. This workflow only decides whether a change is allowed to
+# land, and it is split in two because the two halves answer different
+# questions at very different cost.
+#
+# `check` answers "is this coherent": gates, types, lint, unit tests, no
+# browser, done in well under a minute, and runs on everything. `full`
+# answers "is this allowed to land": the above plus Playwright and a
+# dependency audit, and only runs once landing is actually in prospect — on `main`, and
+# on a pull request that is no longer a draft.
+#
+# So: open a pull request as a draft and iterate against `check`. Mark it
+# ready for review when you want it merged, and the full suite runs before it
+# can be. `full` can also be asked for by hand from the Actions tab.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Gates
+        run: pnpm run gates
+
+      - name: Types
+        run: pnpm run check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Unit tests
+        run: pnpm run test:unit --run
+
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Chromium is the same build until Playwright itself moves, and the
+      # lockfile is what says when that is.
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Playwright's webServer builds before it serves, so this leaves a
+      # fresh build in .svelte-kit/output for the budget check below to
+      # measure. There is no separate build step: there was one, and it
+      # built the same thing a second time.
+      - name: End-to-end tests
+        run: pnpm run test:e2e
+
+      # A red suite is only useful if you can see what it says.
+      - name: Keep the report of a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high

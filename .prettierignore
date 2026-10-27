@@ -1,0 +1,7 @@
+.svelte-kit
+/build
+pnpm-lock.yaml
+package-lock.json
+
+# Font atlases rendered by scripts/fonts.mjs.
+/static/msdf

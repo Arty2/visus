@@ -1,0 +1,300 @@
+/*
+ * visus is dark, always. A headset's browser is used in a dim room with the
+ * eyes adjusted to it, a 3D model reads best against a dark frame, and one
+ * theme designed properly beats two done by halves. So there is no
+ * `prefers-color-scheme` branch and no pre-paint theme script: the tokens
+ * below are the only values, resolved before first paint, with no flash.
+ *
+ * Plain hex and rgba on purpose — not `light-dark()` or `color-mix()`, which
+ * this project's rule on Baseline *Widely* available rules out (see
+ * TECHNICAL.md § Theming), and whose failure mode on an older engine is an
+ * unreadable page. The same values are mirrored for the headset's panels in
+ * src/lib/viewer/theme.ts; change one, change both.
+ */
+:root {
+	color-scheme: dark;
+
+	--bg: #07090c;
+	--panel: #0d1117;
+	--surface: #131a22;
+	--surface-hover: #1a232e;
+	--line: #1f2833;
+	--line-strong: #2d3a48;
+
+	--text: #e8eef5;
+	--text-dim: #9aa8b8;
+	--text-faint: #7f8d9e;
+
+	/* One accent for anything that can be acted on — IBM's orange 40 — and
+	   purple 40 for notes, wherever they appear: pins in the model, their
+	   list, their labels. Two hues far apart, so "press this" and "this is a
+	   note" are never confused, and both read on the dark UI and on the
+	   model's white sky. */
+	--accent: #ff832b;
+	--accent-ink: #1c0f00;
+	--accent-soft: rgba(255, 131, 43, 0.13);
+	--accent-line: rgba(255, 131, 43, 0.5);
+	--note: #be95ff;
+	--note-soft: rgba(190, 149, 255, 0.15);
+	--danger: #ff7a7a;
+	--danger-soft: rgba(255, 107, 107, 0.12);
+
+	--radius: 16px;
+	--radius-sm: 11px;
+	--control: 2.75rem;
+
+	/* IBM Plex, self-hosted (src/routes/+layout.svelte imports it), with the
+	   system's own faces behind it for the moment before it arrives. */
+	--font: 'IBM Plex Sans Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+/* A minimal, deliberate reset — not a framework. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	/* Larger than the browser's 16px: this is read at arm's length in a
+	   headset as often as on a desk. */
+	font-size: 112.5%;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	min-height: 100svh;
+	background:
+		radial-gradient(70rem 36rem at 12% -12%, rgba(255, 131, 43, 0.07), transparent 60%),
+		radial-gradient(60rem 30rem at 100% 0%, rgba(190, 149, 255, 0.05), transparent 55%), var(--bg);
+	background-color: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: var(--accent-soft);
+	color: var(--text);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/*
+ * Parts drawn by Bits UI (src/routes/+page.svelte, Tip.svelte, WhatsNew):
+ * its dialogs and tooltips render at the end of <body>, outside any
+ * component's scoped styles, so their looks live here. They state their
+ * state as data attributes — data-state="open|closed|on|off|checked" —
+ * which is what's styled. Positions are set by Svelte through the CSSOM
+ * (style.cssText), which style-src 'self' allows; no style attribute is
+ * ever written into markup.
+ */
+.icon-btn {
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.icon-btn:hover {
+	background: var(--surface-hover);
+	border-color: var(--line-strong);
+	color: var(--text);
+}
+
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	background: rgba(3, 5, 8, 0.72);
+}
+
+.dialog {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	z-index: 41;
+	width: min(52rem, calc(100vw - 2rem));
+	max-height: calc(100svh - 2rem);
+	overflow: auto;
+	padding: 1.5rem;
+	border: 1px solid var(--line-strong);
+	border-radius: calc(var(--radius) + 4px);
+	background: var(--panel);
+	color: var(--text);
+	box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+	transform: translate(-50%, -50%);
+}
+
+.dialog.narrow {
+	width: min(30rem, calc(100vw - 2rem));
+}
+
+.dialog-title {
+	margin: 0;
+	font-size: 1.2rem;
+	font-weight: 650;
+}
+
+.tip {
+	z-index: 50;
+	padding: 0.35rem 0.65rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: #10151c;
+	color: var(--text);
+	font-size: 0.82rem;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* The sketch rail down the left of the view: tools, then colours. */
+.rail {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 0.25rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: rgba(9, 12, 16, 0.82);
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	pointer-events: auto;
+}
+
+.tool,
+.swatch {
+	display: grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: none;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.tool:hover,
+.swatch:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.tool[data-state='on'] {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+
+.swatch[data-state='on'] {
+	border-color: var(--text);
+}
+
+.tool:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+canvas.drawing {
+	cursor: crosshair;
+}
+
+/* The background picker: the other part of the canvas HUD that takes clicks. */
+.backdrops {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.25rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: rgba(9, 12, 16, 0.82);
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	pointer-events: auto;
+}
+
+.backdrop {
+	display: grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: none;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.backdrop:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.backdrop[data-state='on'] {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+
+.switch-track {
+	display: inline-flex;
+	align-items: center;
+	width: 2.4rem;
+	height: 1.35rem;
+	padding: 2px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: var(--surface);
+	cursor: pointer;
+}
+
+.switch-track[data-state='checked'] {
+	border-color: var(--accent);
+	background: var(--accent);
+}
+
+.switch-thumb {
+	display: block;
+	width: 0.95rem;
+	height: 0.95rem;
+	border-radius: 50%;
+	background: var(--text-dim);
+	transition: transform 120ms ease;
+}
+
+.switch-track[data-state='checked'] .switch-thumb {
+	background: var(--accent-ink);
+	transform: translateX(1.05rem);
+}
+
+code {
+	font-family: var(--mono);
+	font-size: 0.9em;
+	padding: 0.05em 0.35em;
+	border-radius: 6px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+}
+
+/*
+ * Motion is opt-in, not opt-out: nothing animates by default, and anything
+ * this project adds later should still gate on this query rather than assume
+ * it. See TECHNICAL.md § Baseline browser support.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
+}

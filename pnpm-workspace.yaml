@@ -1,0 +1,8 @@
+onlyBuiltDependencies:
+  - esbuild
+
+# One three.js for everything. @pmndrs/xr depends on @iwer/devui, which
+# pins an older three; two copies means two sets of classes, and instanceof
+# checks between them fail silently.
+overrides:
+  three: $three

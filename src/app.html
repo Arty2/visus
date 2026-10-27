@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="theme-color" content="#07090c" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/icons/icon-192.png" />
+		%sveltekit.head%
+	</head>
+	<!--
+		No `style="display: contents"` wrapper div here, on purpose: it is the
+		SvelteKit scaffold default, but a literal style="..." attribute in this
+		file is static markup this project owns rather than something the
+		framework injects and hashes for itself, and the strict CSP in
+		vite.config.ts (style-src 'self') refuses it outright.
+	-->
+	<body data-sveltekit-preload-data="hover">
+		%sveltekit.body%
+	</body>
+</html>
