@@ -12,6 +12,18 @@ export async function ready(page: Page) {
 }
 
 /**
+ * Reloads, and waits until the page is up again. After a reload the notes
+ * appear only once the viewer has loaded and opened the model — seconds,
+ * under a loaded test run — so an assertion straight after `reload()`
+ * would race it. (It did: a test of notes surviving a reload failed now
+ * and then with the notes on screen a moment later.)
+ */
+export async function reloaded(page: Page) {
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Approach' })).toBeVisible({ timeout: 30_000 });
+}
+
+/**
  * Places a note the way a person would on a screen: look from the
  * Approach camera, press Add note, click the middle of the pavilion.
  */

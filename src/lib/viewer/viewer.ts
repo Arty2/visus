@@ -336,6 +336,14 @@ export class Viewer {
 		this.world.add(root);
 		root.updateMatrixWorld(true);
 		this.bounds.setFromObject(root);
+		// A splat scan has no geometry for setFromObject to measure; Spark
+		// knows where its splats are. It also answers raycasts itself, so
+		// pointing, teleporting, notes and walking work on a scan.
+		const scan = root.userData.splat as (Object3D & { getBoundingBox(): Box3 }) | undefined;
+		if (scan) {
+			this.bounds.union(scan.getBoundingBox().applyMatrix4(scan.matrixWorld));
+			this.targets.push(scan);
+		}
 		root.traverse((o) => {
 			const mesh = o as Mesh;
 			if (!mesh.isMesh || !mesh.visible) return;

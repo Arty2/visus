@@ -61,6 +61,7 @@
 		"@gltf-transform/functions": "^4.5.1",
 		"@pmndrs/uikit": "^1.0.77",
 		"@pmndrs/xr": "^6.6.32",
+		"@sparkjsdev/spark": "^2.4.0",
 		"bits-ui": "^2.20.2",
 		"camera-controls": "^3.1.2",
 		"idb-keyval": "^6.3.0",

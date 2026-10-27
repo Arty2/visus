@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { collectErrors, expectModel, ready } from './helpers';
+import { collectErrors, expectModel, ready, reloaded } from './helpers';
 
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
@@ -62,11 +62,33 @@ test('a model with many meshes is optimised, cameras kept', async ({ page }) => 
 test('optimising can be switched off, and stays off', async ({ page }) => {
 	await ready(page);
 	await page.getByRole('switch', { name: 'Optimise large models' }).uncheck();
-	await page.reload();
+	await reloaded(page);
 	await expect(page.getByRole('switch', { name: 'Optimise large models' })).not.toBeChecked();
 	await page.getByLabel('Open model…').setInputFiles(fixture('blocks.glb'));
 	await expectModel(page, 'blocks.glb');
 	await expect(page.getByText('Optimised for VR')).toHaveCount(0);
+});
+
+// A Gaussian splat scan, through Spark: decoded in a blob: Worker under the
+// real Trusted Types policy, and raycastable, so a note can be pinned to it.
+test('a splat scan opens, and takes a note', async ({ page }) => {
+	const errors = collectErrors(page);
+	await ready(page);
+	await page.getByLabel('Open model…').setInputFiles(fixture('scan.splat'));
+	await expectModel(page, 'scan.splat');
+	await page.getByRole('button', { name: 'Add note' }).click();
+	const box = (await page.locator('.viewport canvas').boundingBox())!;
+	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+	await expect(page.locator('.note-text')).toHaveCount(1);
+	expect(errors).toEqual([]);
+});
+
+test('a .ply that is a mesh, not a scan, opens as a mesh', async ({ page }) => {
+	const errors = collectErrors(page);
+	await ready(page);
+	await page.getByLabel('Open model…').setInputFiles(fixture('box.ply'));
+	await expectModel(page, 'box.ply');
+	expect(errors).toEqual([]);
 });
 
 test('a SketchUp-style COLLADA file opens, scene cameras named, missing texture listed', async ({
@@ -108,7 +130,7 @@ test('a model reopens from the last session without the file picker', async ({ p
 	await ready(page);
 	await page.getByLabel('Open model…').setInputFiles(fixture('floor.gltf'));
 	await expectModel(page, 'floor.gltf');
-	await page.reload();
+	await reloaded(page);
 	await page.getByRole('button', { name: 'Reopen floor.gltf' }).click();
 	await expectModel(page, 'floor.gltf');
 });

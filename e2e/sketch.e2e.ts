@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { collectErrors, ready } from './helpers';
+import { collectErrors, ready, reloaded } from './helpers';
 
 // Sketching on a screen: drag on the model with a tool in hand. Positions
 // are fractions of the canvas, looking from the sample's Approach camera,
@@ -45,7 +45,7 @@ test('a rectangle drawn on the model is kept, exported, and survives a reload', 
 	expect(sketch.points).toHaveLength(5); // four corners, closed
 	expect(sketch.colour).toBe('#fa4d56');
 
-	await page.reload();
+	await reloaded(page);
 	await expect(count(page)).toHaveText('1 sketch');
 	expect(errors).toEqual([]);
 });

@@ -37,6 +37,13 @@ notes are unchanged; COLLADA's simpler materials come back as standard ones,
 close but not identical. The page says what it did, and **Optimise large
 models**, at the foot of the page, turns it off.
 
+**Scans** open too: Gaussian splats (`.spz`, `.splat`, `.ksplat`, or a
+`.ply` written by a splat trainer) — the photographic captures phone apps
+and drones make of real places. Notes, sketches, views, walking and VR work
+on a scan as on a model, so the existing site can be reviewed the same
+way. A scan is turned upright as it opens; a `.ply` that is a mesh rather
+than a scan opens as a mesh.
+
 `.skp` files can't be read directly — SketchUp's own format isn't open. The
 last model opened is remembered, so after a reload **Reopen** brings it back
 without the file picker. **Sample** opens a small pavilion to try things on.
@@ -164,7 +171,11 @@ makes no requests beyond loading itself.
 ## Limitations
 
 - **Formats**: no `.skp`, `.ifc`, `.3dm` or `.usdz`; export to glTF,
-  FBX, COLLADA or OBJ. OBJ carries no cameras and no units.
+  FBX, COLLADA or OBJ. OBJ carries no cameras and no units. A scan and a
+  model can't yet be opened together, one inside the other.
+- **Scans** are shown as captured: very large ones (millions of splats)
+  may run below the headset's frame rate, and pointing at one is slower
+  than at a mesh.
 - **Size**: a model has to fit in the headset's memory, and every triangle
   is drawn every frame. Large SketchUp exports with dense furniture or
   vegetation may stutter; purge unused components and hide what isn't needed

@@ -13,6 +13,7 @@ import { extension, isImage, pickMain, resourceKey } from './files';
 import { camerasIn, type ViewTarget } from './views';
 import { count, hasCompressedTextures, optimise, shouldOptimise, type Counts } from './optimise';
 import { disposeScene } from './dispose';
+import { isSplat, loadMeshPly, loadSplat } from './splat';
 
 export interface LoadedModel {
 	root: Object3D;
@@ -72,7 +73,7 @@ export async function loadFiles(
 		throw new Error(
 			skp
 				? 'SketchUp files can’t be opened directly. In SketchUp, use File → Export → 3D Model and choose COLLADA (.dae) or glTF (.glb).'
-				: 'Choose a .glb, .gltf, .fbx, .dae or .obj file (with its textures, if it has any).'
+				: 'Choose a .glb, .gltf, .fbx, .dae or .obj model (with its textures), or a .ply, .spz, .splat or .ksplat scan.'
 		);
 	}
 
@@ -105,7 +106,11 @@ export async function loadFiles(
 	const texturesIn = settled(manager);
 	let root: Object3D;
 
-	if (format === 'dae') {
+	if (await isSplat(file, format)) {
+		root = await loadSplat(file, renderer);
+	} else if (format === 'ply') {
+		root = await loadMeshPly(file);
+	} else if (format === 'dae') {
 		root = await parseCollada(await file.text(), manager);
 	} else if (format === 'fbx') {
 		root = new FBXLoader(manager).parse(await file.arrayBuffer(), '');
@@ -116,8 +121,11 @@ export async function loadFiles(
 		root.scale.multiplyScalar(cmPerUnit / 100);
 	} else if (format === 'obj') {
 		root = await parseOBJ(await file.text(), files, manager);
-	} else {
+	} else if (format === 'glb' || format === 'gltf') {
 		root = await parseGLTF(file, format, manager, renderer);
+	} else {
+		// isSplat() claimed every splat format; nothing else reaches here.
+		throw new Error(`Couldn’t open ${file.name}.`);
 	}
 	await texturesIn();
 	let optimised: LoadedModel['optimised'] = null;

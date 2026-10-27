@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import pkg from '../package.json' with { type: 'json' };
-import { expectModel, placeNote, ready } from './helpers';
+import { expectModel, placeNote, ready, reloaded } from './helpers';
 
 test('the page renders and the version credit matches package.json', async ({ page }) => {
 	await ready(page);
@@ -25,7 +25,7 @@ test('the background is white unless chosen, and a choice is remembered', async 
 	// One of four, so radios: Bits UI's single-choice toggle group.
 	await expect(page.getByRole('radio', { name: 'White background' })).toBeChecked();
 	await page.getByRole('radio', { name: 'Sky background' }).click();
-	await page.reload();
+	await reloaded(page);
 	await expect(page.getByRole('radio', { name: 'Sky background' })).toBeChecked();
 	await expect(page.getByRole('radio', { name: 'White background' })).not.toBeChecked();
 });
@@ -51,7 +51,7 @@ test('every icon is real SVG, including ones drawn after load', async ({ page })
 test('a note placed on the model persists across a reload', async ({ page }) => {
 	await ready(page);
 	await placeNote(page, 'Check the step height');
-	await page.reload();
+	await reloaded(page);
 	await expect(page.locator('.note-text')).toHaveValue('Check the step height');
 });
 
@@ -77,7 +77,7 @@ test('resolving and deleting a note, and undo putting it back', async ({ page })
 	await page.getByRole('button', { name: 'Undo' }).click();
 	await expect(page.locator('.note-text')).toHaveValue('temporary');
 
-	await page.reload();
+	await reloaded(page);
 	await expect(page.locator('.note-text')).toHaveValue('temporary');
 });
 
@@ -97,7 +97,7 @@ test('a saved view joins the list, can be renamed, and survives a reload', async
 	await page.getByRole('button', { name: 'Rename From the lawn' }).click();
 	await page.getByLabel('New name for From the lawn').fill('discarded');
 	await page.getByLabel('New name for From the lawn').press('Escape');
-	await page.reload();
+	await reloaded(page);
 	await expect(page.getByRole('button', { name: 'From the lawn', exact: true })).toBeVisible();
 });
 
@@ -137,7 +137,7 @@ test('importing notes that share an id shows all of them', async ({ page }) => {
 		)
 	});
 	await expect(page.locator('.note-text')).toHaveCount(2);
-	await page.reload();
+	await reloaded(page);
 	await expect(page.locator('.note-text')).toHaveCount(2);
 });
 
@@ -262,10 +262,10 @@ test('what changed opens by itself after an update, and only once', async ({ pag
 	await expect(page.getByRole('dialog')).toBeHidden();
 
 	await page.evaluate(() => localStorage.setItem('visus:seen-version', '0.0.1'));
-	await page.reload();
+	await reloaded(page);
 	await expect(page.getByRole('dialog')).toBeVisible();
 
 	await page.keyboard.press('Escape');
-	await page.reload();
+	await reloaded(page);
 	await expect(page.getByRole('dialog')).toBeHidden();
 });

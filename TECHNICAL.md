@@ -377,6 +377,7 @@ one, and what it replaced:
 | `@fontsource/ibm-plex-mono`, `@fontsource-variable/ibm-plex-sans` | IBM Plex, served from this origin                                                                | The system font                                                     |
 | `bits-ui`                                                         | Headless, accessible dialogs, tooltips, a toggle group and a switch, styled by `app.css`         | Native `<dialog>`, `title` attributes, a hand-drawn checkbox switch |
 | `yjs`                                                             | A model's notes, views and sketches as a CRDT: merging imports, multi-step undo                  | Plain lists in localStorage; one snapshot of undo                   |
+| `@sparkjsdev/spark`                                               | Gaussian splat scans (World Labs' renderer): decoding, sorting, drawing in both eyes, raycasting | —                                                                   |
 
 **glTF-Transform without its pixel tools.** Its functions package imports
 `ndarray-pixels` and `ndarray-lanczos` for texture work, and `ndarray-ops`
@@ -458,6 +459,18 @@ point, teleports put the feet on the floor, turning rotates about the head.
 Scaling changes the model's group, never the dolly, so the eye distance
 stays right. Notes and saved views are kept in model coordinates and
 survive any scale.
+
+**Scans** (`splat.ts`) are Spark `SplatMesh`es, with a `SparkRenderer`
+beside them in the model's group so both go when the model does. Spark
+decodes in Workers from `blob:` URLs — the `default` Trusted Types policy
+passes exactly those; its `data:` fallback only runs if that throws — and
+compiles WebAssembly, which the CSP already allows. It's imported only when
+a scan opens. A scan has no geometry for `Box3.setFromObject`, so its
+bounds come from Spark, and it answers raycasts itself, which is what lets
+notes, teleporting and walking work on it. Splat trainers write Y-down;
+scans are turned half over about X as they open. A `.ply` is sniffed:
+splat properties in the header (`f_dc_0`, `scale_0`, `opacity`) mean a
+scan, anything else goes to three's `PLYLoader`.
 
 **Sketches** are stored as the polylines they draw (`store/notes.ts`), in
 model coordinates, lifted a hair off the surface they were drawn on so they

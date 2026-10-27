@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { collectErrors, ready } from './helpers';
 import { loadDoc, readNotes } from '../src/lib/store/doc';
 
@@ -16,6 +17,11 @@ import { loadDoc, readNotes } from '../src/lib/store/doc';
  */
 
 const iwer = createRequire(import.meta.url).resolve('iwer/build/iwer.min.js');
+
+// Two minutes a test, not one: each drives an emulated Quest 3 at its full
+// resolution through a software renderer, a few frames a second, and under
+// a full parallel run that alone can pass the usual minute.
+test.describe.configure({ timeout: 120_000 });
 
 type Hand = 'left' | 'right';
 
@@ -230,5 +236,26 @@ test('Draw on the headset menu turns the trigger into a pen', async ({ page }) =
 	await frames(page);
 
 	await expect(page.locator('.sketch-row span')).toHaveText('1 sketch');
+	expect(errors).toEqual([]);
+});
+
+// Spark draws splats into both eyes itself; a scan in a headset session
+// must not throw anything.
+test('a splat scan can be taken into VR', async ({ page }) => {
+	const errors = collectErrors(page);
+	await page.addInitScript({ path: iwer });
+	await page.addInitScript(() => {
+		const xr = (globalThis as unknown as { IWER: Record<string, unknown> }).IWER;
+		const Device = xr.XRDevice as new (config: unknown) => { installRuntime(o: object): void };
+		new Device(xr.metaQuest3).installRuntime({ forceInstall: true });
+	});
+	await ready(page);
+	await page
+		.getByLabel('Open model…')
+		.setInputFiles(fileURLToPath(new URL('./fixtures/scan.splat', import.meta.url)));
+	await expect(page.locator('.chip-title')).toHaveText('scan.splat', { timeout: 20_000 });
+	await page.getByRole('button', { name: 'Enter VR' }).click();
+	await expect(page.getByText('In VR — take the headset off')).toBeVisible();
+	await frames(page, 10);
 	expect(errors).toEqual([]);
 });

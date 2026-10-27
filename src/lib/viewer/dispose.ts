@@ -10,6 +10,9 @@ import type { Material, Mesh, Object3D, Texture } from 'three';
 export function disposeScene(root: Object3D) {
 	root.traverse((o) => {
 		const mesh = o as Mesh;
+		// Spark's scan and renderer hold GPU textures and Workers of their own.
+		const own = o as { dispose?: () => void };
+		if (!mesh.isMesh && typeof own.dispose === 'function') own.dispose();
 		if (!mesh.isMesh) return;
 		mesh.geometry?.disposeBoundsTree?.();
 		mesh.geometry?.dispose();
