@@ -9,8 +9,6 @@ export type Format = 'glb' | 'gltf' | 'dae';
 // self-contained, so it's the least likely to be missing a part.
 const FORMATS: Format[] = ['glb', 'gltf', 'dae'];
 
-export const ACCEPT = '.glb,.gltf,.dae,.bin,.png,.jpg,.jpeg,.webp,.tga,.bmp,.gif';
-
 export function extension(name: string): string {
 	const dot = name.lastIndexOf('.');
 	return dot < 0 ? '' : name.slice(dot + 1).toLowerCase();

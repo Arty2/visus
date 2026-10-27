@@ -63,6 +63,13 @@ test('a model reopens from the last session without the file picker', async ({ p
 	await expect(page.getByRole('heading', { name: 'floor.gltf' })).toBeVisible();
 });
 
+// An `accept` list greys .glb and .dae out in Android-based file pickers,
+// the Quest's included: they have no MIME type those pickers know.
+test('the model picker filters nothing, so the headset can pick any file', async ({ page }) => {
+	await ready(page);
+	await expect(page.getByLabel('Open model…')).not.toHaveAttribute('accept');
+});
+
 test('a SketchUp file is refused with how to export it', async ({ page }) => {
 	await ready(page);
 	await page.getByLabel('Open model…').setInputFiles({

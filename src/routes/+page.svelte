@@ -7,7 +7,6 @@
 	import type { ModelNotes } from '$lib/store/notes';
 	import type { Viewer } from '$lib/viewer/viewer';
 	import type { ViewTarget } from '$lib/viewer/views';
-	import { ACCEPT } from '$lib/viewer/files';
 	import WhatsNew from '$lib/WhatsNew.svelte';
 
 	let container: HTMLDivElement | undefined = $state();
@@ -27,6 +26,8 @@
 	let addMode = $state(false);
 	let currentView = $state(-1);
 	let importError = $state('');
+	/** The saved view whose name is being edited in place, if any. */
+	let renaming: string | null = $state(null);
 
 	const views: ViewTarget[] = $derived([
 		...fileViews,
@@ -216,13 +217,16 @@
 	</header>
 
 	<div class="toolbar">
+		<!-- No `accept` filter, on purpose: Android-based browsers, the Quest's
+		     among them, match it by MIME type, and .glb and .dae have none they
+		     recognise — the files show greyed out and can't be picked. What
+		     was picked is checked after (src/lib/viewer/files.ts). -->
 		<label class="button primary">
 			Open model…
 			<input
 				bind:this={modelInput}
 				type="file"
 				multiple
-				accept={ACCEPT}
 				onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
 			/>
 		</label>
@@ -274,23 +278,41 @@
 					<ol class="views">
 						{#each views as view, i (view.id)}
 							<li class:current={i === currentView}>
-								<button
-									type="button"
-									class="go"
-									onclick={() => viewer?.goToView(i)}
-									aria-current={i === currentView ? 'true' : undefined}
-								>
-									{view.name}
-								</button>
-								{#if view.saved}
+								{#if renaming === view.id}
+									<!-- svelte-ignore a11y_autofocus -->
+									<input
+										class="note-text"
+										value={view.name}
+										aria-label={`New name for ${view.name}`}
+										autofocus
+										onkeydown={(e) => {
+											if (e.key === 'Enter') e.currentTarget.blur();
+											if (e.key === 'Escape') {
+												e.currentTarget.value = view.name;
+												e.currentTarget.blur();
+											}
+										}}
+										onblur={(e) => {
+											notesStore.renameViewpoint(view.id, e.currentTarget.value);
+											renaming = null;
+										}}
+									/>
+								{:else}
+									<button
+										type="button"
+										class="go"
+										onclick={() => viewer?.goToView(i)}
+										aria-current={i === currentView ? 'true' : undefined}
+									>
+										{view.name}
+									</button>
+								{/if}
+								{#if view.saved && renaming !== view.id}
 									<button
 										type="button"
 										class="small-button"
 										aria-label={`Rename ${view.name}`}
-										onclick={() => {
-											const name = prompt('Name this view', view.name);
-											if (name) notesStore.renameViewpoint(view.id, name);
-										}}>Rename</button
+										onclick={() => (renaming = view.id)}>Rename</button
 									>
 									<button
 										type="button"

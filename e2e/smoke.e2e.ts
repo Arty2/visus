@@ -48,8 +48,17 @@ test('a saved view joins the list, can be renamed, and survives a reload', async
 	await page.getByRole('button', { name: 'Save this view' }).click();
 	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
 
-	page.once('dialog', (dialog) => dialog.accept('From the lawn'));
 	await page.getByRole('button', { name: 'Rename View 1' }).click();
+	const field = page.getByLabel('New name for View 1');
+	await expect(field).toBeFocused();
+	await field.fill('From the lawn');
+	await field.press('Enter');
+	await expect(page.getByRole('button', { name: 'From the lawn', exact: true })).toBeVisible();
+
+	// Escape leaves the name as it was.
+	await page.getByRole('button', { name: 'Rename From the lawn' }).click();
+	await page.getByLabel('New name for From the lawn').fill('discarded');
+	await page.getByLabel('New name for From the lawn').press('Escape');
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'From the lawn', exact: true })).toBeVisible();
 });

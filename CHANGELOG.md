@@ -6,6 +6,12 @@ heading to the new number and adds its lines there, never a section of its own.
 Features only — not fixes, not why, not how; that is the README's. Three lines
 to a release, six at the very most. Plain text and `code` spans only.
 
+## 0.2.0 — 2026-10-27
+
+- Controllers buzz to confirm a button, a teleport or a grab.
+- Models can be picked from the Quest's own file browser.
+- Saved views are renamed in place.
+
 ## 0.1.0 — 2026-10-27
 
 - Open `.glb`, `.gltf` or SketchUp's `.dae` exports, and step inside them in a Meta Quest.
