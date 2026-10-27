@@ -32,6 +32,7 @@ import {
 	type Texture
 } from 'three';
 import CameraControls from 'camera-controls';
+import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Annotation, Vec3 } from '$lib/store/notes';
 import { autoShift, keyboardRows, pressKey } from './keyboard';
@@ -74,7 +75,20 @@ CameraControls.install({
 	THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster }
 });
 
+// three-mesh-bvh: every mesh gets a bounding-volume hierarchy when a model
+// opens (setModel), and raycasts walk it instead of every triangle. Pointing,
+// the teleport arc, placing notes and walking all raycast, every frame, and
+// a SketchUp export can be millions of triangles. Meshes without a tree —
+// the note pins — fall back to three's own raycast.
+BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+Mesh.prototype.raycast = acceleratedRaycast;
+
 const UP = new Vector3(0, 1, 0);
+/** The tallest step walking climbs by itself, metres. */
+const STEP = 0.45;
+/** How close walking lets you come to a wall, metres. */
+const BODY = 0.3;
 /** Animated moves on a screen — unless the person has asked for less motion. */
 const animate = () => !matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SNAP_TURN = Math.PI / 6;
@@ -138,7 +152,11 @@ export class Viewer {
 	private readonly world = new Group();
 	private readonly controls: CameraControls;
 	private readonly markers = new Markers();
-	private readonly raycaster = new Raycaster();
+	private readonly raycaster = Object.assign(new Raycaster(), {
+		// The nearest hit is all anything here wants, and stopping at the
+		// first per mesh is what makes the BVH's raycast fast.
+		firstHitOnly: true
+	});
 	private readonly resizeObserver: ResizeObserver;
 	private readonly hands: Hand[] = [];
 	private readonly arc: Line;
@@ -271,7 +289,12 @@ export class Viewer {
 		root.updateMatrixWorld(true);
 		this.bounds.setFromObject(root);
 		root.traverse((o) => {
-			if ((o as Mesh).isMesh && o.visible) this.targets.push(o);
+			const mesh = o as Mesh;
+			if (!mesh.isMesh || !mesh.visible) return;
+			// Geometry is often shared between meshes (instanced components);
+			// one tree serves them all.
+			if (!mesh.geometry.boundsTree) mesh.geometry.computeBoundsTree();
+			this.targets.push(mesh);
 		});
 
 		const size = this.bounds.getSize(new Vector3());
@@ -681,9 +704,51 @@ export class Viewer {
 		const yaw = this.headYaw();
 		const forward = forwardOf(yaw);
 		const right = new Vector3().crossVectors(forward, UP);
-		this.dolly.position
+		const step = new Vector3()
 			.addScaledVector(forward, -y * MOVE_SPEED * dt)
 			.addScaledVector(right, x * MOVE_SPEED * dt);
+		if (this.world.scale.x === 1 && this.targets.length) this.walk(step, dt);
+		else this.dolly.position.add(step);
+	}
+
+	/**
+	 * Walking life-size: blocked by walls, carried up stairs and ramps and
+	 * down them, the way a person would move through the building. Feet are
+	 * the dolly's floor; the body is tested at knee and chest height so a
+	 * low wall or a table edge stops you too. Where there's no floor within
+	 * reach below — an open terrace edge, or no model there at all — you
+	 * keep your height rather than fall.
+	 */
+	private walk(step: Vector3, dt: number) {
+		const head = this.camera.getWorldPosition(new Vector3());
+		const feet = new Vector3(head.x, this.dolly.position.y, head.z);
+		// Measured from the floor underfoot, not the dolly: a saved camera's
+		// eye is wherever it was, which can leave the feet inside a slab —
+		// and a knee-height test from there hits everything.
+		feet.y = this.floorBelow(feet) ?? feet.y;
+		const direction = step.clone().normalize();
+
+		for (const height of [STEP + 0.05, 1.2]) {
+			this.raycaster.set(feet.clone().setY(feet.y + height), direction);
+			this.raycaster.far = step.length() + BODY;
+			const [wall] = this.raycaster.intersectObjects(this.targets, false);
+			this.raycaster.far = Infinity;
+			if (wall) return;
+		}
+
+		const floor = this.floorBelow(feet.clone().add(step)) ?? feet.y;
+		this.dolly.position.add(step);
+		// Eased rather than snapped, so stairs feel like a slope, not a stutter.
+		this.dolly.position.y += (floor - this.dolly.position.y) * Math.min(1, dt * 12);
+	}
+
+	/** The floor under a point, if one is within a step above it or 1.5 m below. */
+	private floorBelow(at: Vector3): number | null {
+		this.raycaster.set(at.clone().setY(at.y + STEP), new Vector3(0, -1, 0));
+		this.raycaster.far = STEP + 1.5;
+		const [floor] = this.raycaster.intersectObjects(this.targets, false);
+		this.raycaster.far = Infinity;
+		return floor ? floor.point.y : null;
 	}
 
 	private rightStick(hand: Hand) {
@@ -1249,6 +1314,7 @@ function dispose(root: Object3D) {
 	root.traverse((o) => {
 		const mesh = o as Mesh;
 		if (!mesh.isMesh) return;
+		mesh.geometry?.disposeBoundsTree?.();
 		mesh.geometry?.dispose();
 		const materials = (
 			Array.isArray(mesh.material) ? mesh.material : [mesh.material]

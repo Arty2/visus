@@ -369,6 +369,7 @@ one, and what it replaced:
 | `valibot`         | Schemas for notes, views and imported files; types from them | Hand-written type guards                     |
 | `idb-keyval`      | IndexedDB for the last model opened                          | Hand-written request plumbing                |
 | three's loaders   | FBX, OBJ + MTL; Draco, Meshopt and KTX2 decoders             | Refusing those files                         |
+| `three-mesh-bvh`  | Spatial index on every mesh; fast raycasts and walking       | Testing every triangle, every frame          |
 
 One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
 to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two
@@ -387,8 +388,6 @@ arrives fast. Held back on purpose, and what would end it:
 - **Controller models** (`XRControllerModelFactory`) fetch from a CDN, which
   `connect-src 'self'` refuses; a plain grip box is drawn instead. Vendoring
   the Quest's two controller meshes into `static/` would end that.
-- **three-mesh-bvh**, which would make the teleport arc and pointing cheap on
-  huge models (see the README's Limitations). Add it when one stutters.
 
 **How it moves you.** The headset owns the head's pose inside the play
 space; the app owns only where the play space — the _dolly_ — sits, and how

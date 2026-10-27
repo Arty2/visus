@@ -43,7 +43,7 @@ you, with the menu open.
 
 | Control                      | Does                                                                      |
 | ---------------------------- | ------------------------------------------------------------------------- |
-| Left stick                   | Walk, in the direction you're looking                                     |
+| Left stick                   | Walk where you look; at 1:1, up stairs and stopped by walls               |
 | Right stick forward, release | Teleport. Aim at the miniature to step into it at 1:1                     |
 | Right stick left / right     | Turn by 30°                                                               |
 | A / B                        | Next / previous view                                                      |
@@ -57,6 +57,12 @@ The **menu** has the scales (_Fit_ chooses the largest that fits on the
 table; _1:1_ puts you life-size where the right hand points), previous and
 next view, **Save view**, **Add note**, notes shown or hidden, and **Exit
 VR**.
+
+**Walking** at 1:1 keeps you on the model's floors: steps and ramps carry
+you up and down, and walls, railings and furniture taller than a step stop
+you. Where there's no floor within reach — the edge of a terrace — you keep
+your height rather than fall. Teleporting and grabbing the world go
+anywhere, walls included.
 
 **Views** are the cameras saved in the model — SketchUp's Scenes, Blender's
 cameras — followed by the ones you saved. Going to a view puts your eyes
@@ -121,8 +127,6 @@ makes no requests beyond loading itself.
   is drawn every frame. Large SketchUp exports with dense furniture or
   vegetation may stutter; purge unused components and hide what isn't needed
   before exporting.
-- **Teleporting and placing notes** test against every mesh in the model,
-  so on very large models the teleport arc can lag behind the hand.
 - **Animation** in the model isn't played; its cameras are used as still
   views.
 - **Saved views and notes** are kept per browser. Clearing site data, or a

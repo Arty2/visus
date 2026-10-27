@@ -143,3 +143,51 @@ test('grips scale the model, and the stick teleports and turns, without errors',
 	await press(page, 'left', 'y-button');
 	expect(errors).toEqual([]);
 });
+
+/*
+ * Walking at 1:1 against the sample. The Bench camera looks out from in
+ * front of the bench, its eye a little low for a standing person, so
+ * arriving there leaves the feet just below the plinth (0.45 m). Stepping
+ * back, the person should be carried up onto the plinth (or the bench) and
+ * stopped by the back wall, whose face is at z = −3.5.
+ *
+ * Where the walk ended is read back the way a person would keep it: Save
+ * view on the in-headset menu, pressed with the trigger, then the saved
+ * view's position from storage. The menu opens in front of the head on
+ * entering VR: the head starts at (0, 1.6, 0) facing −Z, so the panel's
+ * centre is 0.6 m ahead and 0.2 m down, tilted 0.3 rad, and Save view sits
+ * mid-row 0.078 m above it.
+ *
+ * The stick is held for wall-clock time, not a frame count: the emulated
+ * headset renders at Quest 3 resolution on a software renderer, a few frames
+ * a second, and the app's step is capped at 0.1 s a frame.
+ */
+test('walking is carried up onto the plinth and stopped by the wall', async ({ page }) => {
+	const errors = collectErrors(page);
+	await enterVR(page);
+	await press(page, 'right', 'b-button'); // B from nothing: the last view, Bench
+	await expect(page.locator('[aria-current="true"]')).toHaveText('Bench');
+
+	await page.evaluate(`__xr.controllers.left.updateAxes('thumbstick', 0, 1)`);
+	await page.waitForTimeout(5000);
+	await page.evaluate(`__xr.controllers.left.updateAxes('thumbstick', 0, 0)`);
+	await frames(page);
+
+	await page.evaluate(`{
+		const right = __xr.controllers.right;
+		right.position.set(0, 1.4747, -0.2);
+		right.quaternion.set(0, 0, 0, 1);
+	}`);
+	await frames(page);
+	await press(page, 'right', 'trigger');
+	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
+
+	const [eyeX, eyeY, eyeZ] = await page.evaluate(
+		() => JSON.parse(localStorage.getItem('visus:notes:sample')!).viewpoints[0].position
+	);
+	expect(Math.abs(eyeX)).toBeLessThan(0.5); // straight back, not slid sideways
+	expect(eyeY - 1.6).toBeGreaterThan(0.4); // standing on the plinth or the bench
+	expect(eyeZ).toBeLessThan(-2.7); // it did move back from the camera at −2.6
+	expect(eyeZ).toBeGreaterThan(-3.5); // and never through the wall
+	expect(errors).toEqual([]);
+});
