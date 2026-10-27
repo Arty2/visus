@@ -1,0 +1,395 @@
+# Technical notes
+
+The detail that didn't belong in the README: the CI pipeline, the gates it
+runs, the deployment runbook, and the reasoning behind a few defaults that
+are easy to second-guess out of context. This file is the stack layer's long
+form, like [STACK.md](./STACK.md): a project that changes stack rewrites
+both. See [README.md](./README.md) for the quickstart and
+[AGENTS.md](./AGENTS.md) for how to work in this repo.
+
+## CI
+
+CI is two jobs, and which of them runs is decided by whether the pull
+request is a draft.
+
+|                              | Runs                                                                                       | Takes |
+| ---------------------------- | ------------------------------------------------------------------------------------------ | ----- |
+| Draft pull request           | `check` — gates, types, lint, unit tests                                                   | ~30s  |
+| Ready for review, and `main` | `check` **and** `full` — the above plus Playwright, the bundle budget, `pnpm audit --prod` | ~90s  |
+
+Open a pull request as a draft and leave it there while you work. Every push
+gets the short answer, which catches the ordinary mistake — a type error, a
+lint failure, a broken gate, a unit test — in well under a minute. Mark it
+ready for review when you want it merged: that's what runs Playwright, and a
+pull request that never leaves draft has never had its end-to-end tests run.
+`main` always runs both.
+
+The full suite can also be asked for by hand from the Actions tab
+(`workflow_dispatch`) without marking anything ready.
+
+Two more things decide whether CI runs at all: a commit touching only `.md`
+files is skipped, since prose can't break a build — except `CHANGELOG.md`,
+which the app bundles and the gates check — and a newer push cancels
+the run still going for the older one, because it says everything the older
+one did.
+
+Vercel builds a preview for every push on its own, independently of Actions,
+so the same rule lives in `vercel.json` too: `ignoreCommand` diffs against
+the branch's last deployment (`VERCEL_GIT_PREVIOUS_SHA`, falling back to
+`HEAD^`) and skips the build when only `.md` files changed, `CHANGELOG.md`
+aside (a second `git diff` on it alone, joined with `&&`, because a git
+pathspec can't re-include a file its own exclude matched). Exit 0 means
+skip; if git can't resolve the base — a shallow clone, a first deploy — the
+diff exits 128, which Vercel treats as "build", so the failure mode is an
+ordinary build rather than a missing one.
+
+**One trap worth knowing about before you turn on branch protection.**
+`paths-ignore` means a docs-only pull request produces _no_ check runs at
+all — and a required status check that never reports blocks the merge
+indefinitely, showing "Expected — waiting for status". Three ways out, in
+order of preference: mark the required check as not required and rely on
+`main` always running both jobs; touch any non-`.md` file in that PR; or
+drop `paths-ignore` and accept paying for CI on prose. This skeleton keeps
+`paths-ignore` because a template's own history is mostly prose, but if you
+enable required checks on a project built from it, decide this deliberately
+rather than discovering it on a stuck README fix.
+
+## The gates
+
+`scripts/gates.sh` fails the build on things a linter can't see: any route
+from a string to markup (`{@html}`, `innerHTML`, `eval`, …), a `PUBLIC_`
+environment variable whose name reads as a secret, the baseline security
+headers going missing from `vercel.json` (including the `Content-Security-Policy`
+one that carries `frame-ancestors` — see § Security headers), `AGENTS.md` and
+`STACK.md` together growing past a line budget, and `CHANGELOG.md` not heading with the version
+in `package.json` or a release in it running long — see § Versioning and the
+changelog. This is the place to add the next rule that only
+prose currently enforces — a gate that fails loudly the first time it's broken
+is worth more than a paragraph nobody re-reads. Keep each one scoped to what
+it actually checks, and comment the _why_, not the _what_.
+
+Two conventions worth copying when adding one. Make the threshold
+overridable (`AGENTS_MAX=10 pnpm run gates` exercises the failure path
+without editing the file), and make a check that _can't run_ fail rather
+than pass — the line-budget gate originally reported "ok" when it couldn't
+read the file at all, which is the one outcome worse than not having it.
+
+`scripts/budget.sh` measures the gzipped JavaScript the browser downloads to
+run the app and fails over 100 KB. Raise the number deliberately, in the
+commit that earns it — never as a side effect of an unrelated change.
+
+Every `pnpm run gates` invocation also appends one line to the local,
+gitignored `.claude/logs/gates.jsonl` — see § Self-improving below.
+
+## Versioning and the changelog
+
+The rules are in [AGENTS.md § Versioning](./AGENTS.md#versioning); this is
+the shape, the wording, and what checks them.
+
+**The file.** `CHANGELOG.md` is a preamble for people reading it, then one
+section per minor version, newest first, headed `## X.Y.Z — YYYY-MM-DD` (em
+dash, en dash or hyphen). The heading names the last version the minor
+shipped as: `0.4.1` becoming `0.4.2` rewrites `## 0.4.1 — …` to
+`## 0.4.2 — <today>` and adds its lines there, if it brought anything a user
+would notice. `0.5.0` starts a new section above. So the top heading is
+always the version being shipped, which is what makes the rule checkable.
+
+**The wording.** Each line says what someone can now do or rely on, in their
+words — not which component, handler or setting does it:
+
+| Too technical                                                            | For the user                                  |
+| ------------------------------------------------------------------------ | --------------------------------------------- |
+| Add `ItemsStore.undo()` backed by `$state.snapshot`                      | Deleting or importing can be undone.          |
+| Refactor `fromMarkdown` to accept `* [x]`, nested lists, CRLF            | Markdown import reads more kinds of list.     |
+| Fix empty import replacing the list (#12)                                | An import with nothing in it is refused.      |
+| `prefers-color-scheme` tokens, `color-scheme` meta, theme e2e assertions | Light and dark themes that follow the system. |
+
+The third row is a fix that stays: the user can now rely on something new,
+so it's written as behaviour. Fixes that change nothing a user can rely on
+are left out entirely; git has them. One line is a group of related changes
+— a feature and the options that came with it — so three lines is the usual
+release and six the limit. Blank lines and wrapping don't count.
+
+**Plain text and `code` spans only**, because the app reads the file rather
+than rendering it as Markdown: `src/lib/changelog.ts` parses headings with
+the same pattern the gate uses and splits bullets into text and code runs,
+and `src/lib/WhatsNew.svelte` shows the latest release behind the version
+number. It's bundled with Vite's `?raw` import — offline, no request, and
+always the build's own — and it opens once by itself after an update (the
+last version seen is kept in `localStorage`); a first visit only records it,
+because the page is its own introduction. No Markdown library, and no
+`{@html}`, so the gates' injection-sink check has nothing to say about it.
+
+**What checks it.** `pnpm gates` fails when the top heading isn't
+`package.json`'s version (and says whether to rewrite the heading or add
+one), when any `## ` heading isn't in the readable shape — the parser would
+skip it silently — when a release passes `CHANGELOG_MAX` (6) non-blank lines,
+and on bold, links or headings inside a release. Each is testable without
+editing anything: `CHANGELOG_MAX=1 pnpm run gates`, or `CHANGELOG=<file>` to
+point it at a broken copy. `src/lib/changelog.test.ts` reads the real file
+through the real parser, so the app and the gate can't disagree about it.
+
+There is no lockfile check: `pnpm-lock.yaml` doesn't record the root
+package's version, so `package.json` really is the only copy. A project that
+switches to npm gets one — `package-lock.json` has it twice, at the root and
+under `packages[""]` — and should add it to the gate, regenerating with
+`npm install --package-lock-only` rather than by hand.
+
+## Theming, without a pre-paint script
+
+`src/app.css` defines `--ink`/`--paper` on `:root` and redefines the pair
+inside `@media (prefers-color-scheme: dark)`, with `color-scheme: light
+dark` alongside them. The browser resolves everything before first paint —
+no classic script racing the render, no flash, and no CSP carve-out for an
+inline `<script>`, which is what `listula` and `kalendes` both need a
+`static/theme.js` for.
+
+**This was `light-dark()` first, and that was a bug.** `light-dark()` says
+the same thing in one line, and it is genuinely the better spelling — but
+it is Baseline _Newly_ available and does not reach Widely available until
+**2026-11-13**, which puts it on the wrong side of this project's own rule
+(§ Baseline browser support). The failure mode is the one that matters:
+`--ink: light-dark(#000, #fff)` on an engine without support is invalid at
+computed-value time, so the custom property never resolves, `color: var(--ink)`
+falls back to nothing, and a dark-scheme browser renders black on black. A
+media query has been everywhere for a decade and cannot fail that way.
+`e2e/theme.e2e.ts` now asserts the computed `color` and `background-color`
+in both schemes, so this is enforced rather than remembered. Revisit
+`light-dark()` after that date if the shorter form is worth the edit.
+
+If this project ever needs a **user-chosen** theme that overrides the OS
+(not just follows it), that's the point to reach for the pattern the two
+sibling projects use — see their `CLAUDE.md` files for the reasoning — but
+don't add it pre-emptively.
+
+## Baseline browser support
+
+Evergreen browsers only: no polyfills, no legacy transpilation target, no
+`core-js`. Before reaching for a new CSS or JS feature, check it's
+[Baseline: Widely available](https://web.dev/baseline) — the “widely
+available” tier (safe roughly 2.5 years after the last engine shipped it),
+not merely “newly available” (shipped everywhere, but recently). `svelte.config`
+does not set a `browserslist`; there is nothing here for one to target once
+transpilation is off the table.
+
+This is a real constraint, not a suggestion: a feature that is Baseline
+Newly Available today reads fine on the two browsers that just shipped it
+and breaks silently on the fraction of traffic still one version behind.
+When in doubt, ship the older, safer primitive.
+
+## Content Security Policy
+
+`vite.config.ts` configures SvelteKit's built-in CSP (`csp: { mode: 'auto',
+directives: {...} }`) rather than a hand-written meta tag, because a
+hand-written policy and SvelteKit's own hydration script don't coexist —
+`'auto'` hashes inline scripts on prerendered pages and uses nonces on
+dynamic ones. Two things are pinned rather than generic:
+
+- `require-trusted-types-for: script` plus `trusted-types:
+svelte-trusted-html sveltekit-trusted-url` — both policy names are created
+  by the framework itself (Svelte's own template writes, and the service
+  worker registration if one is ever added), and Chrome refuses to hydrate
+  without the first allow-listed.
+- One pinned hash under `'unsafe-hashes'` in `style-src`, for SvelteKit's own
+  `#svelte-announcer` element, which carries a hardcoded `style="..."`
+  attribute this project doesn't author and can't switch off.
+  `e2e/csp.e2e.ts` fails on any console error, which is what catches a
+  SvelteKit upgrade changing that string before it ships quietly.
+
+`src/app.html` deliberately does not use the SvelteKit scaffold's `<div
+style="display: contents">` wrapper — that's a literal `style="..."`
+attribute in markup this project owns, not something the framework injects
+and hashes for itself, and `style-src 'self'` refuses it. If a future change
+needs that wrapper, wrap the CSS in a class instead of reaching for `style:`.
+
+**Strict where it costs nothing to be, loose where strictness would just be
+security theatre for a generic skeleton.** `default-src`, `script-src`'s
+origins, `object-src` and `base-uri` stay locked down —
+no third-party origin ever gets a free pass, because that's the directive
+that actually stops a supply-chain or XSS payload from phoning home. Four
+things are allow-listed that a maximally strict policy would refuse — none
+of them load anything from off-origin, and all four are ordinary local-first
+plumbing:
+
+- `img-src: data: blob:` — a picture can't execute script. This is the one
+  directive where "strict by default" was pure caution rather than a real
+  defence, so it's open, and Vite's default small-asset inlining (which
+  turns small imported assets into `data:` URIs) is left on rather than
+  disabled.
+- `worker-src: blob:` — a bundler-inlined Web Worker (the way `kalendes`'s
+  `ics.worker.ts` is actually loaded at runtime) is created from a `blob:`
+  URL by every major bundler. Refusing it doesn't stop an attacker; it stops
+  a completely ordinary way to move work off the main thread.
+- `connect-src: blob:` — a blob URL is this tab's own memory, so reading one
+  back opens no network path that `'self'` didn't already allow. `src/lib/io`
+  doesn't need it today (`File.text()` isn't a fetch), but several common
+  file-reading helpers are written as `fetch(objectURL)` and there's no
+  reason to make that a surprise.
+- `script-src: 'wasm-unsafe-eval'` — permits _compiling WebAssembly_, not
+  evaluating arbitrary strings as script. An in-browser SQLite (`sql.js`,
+  `wa-sqlite`) or any other WASM-based local-first engine needs this and
+  gets nothing else from it. Nothing here uses it yet; it's headroom.
+
+This is looser than `listula`'s CSP, which this skeleton's structure was
+otherwise drawn from — deliberately. `listula` holds a decryption key in
+browser memory for the life of the tab, so _any_ successful injection there
+is a full compromise, and its CSP is tuned to that specific, high-stakes
+threat model. A generic skeleton with no secret in memory doesn't get to
+borrow that posture for free; doing so would just make "add a worker" or
+"add a WASM dependency" a fight with the framework the day a real feature
+needs one, in exchange for a defence that isn't actually defending anything
+here. See `docs/PATTERNS.md` for the fuller comparison.
+
+## Security headers
+
+`vercel.json` sets HSTS, `X-Content-Type-Options`, `Referrer-Policy`,
+`X-Frame-Options: DENY`, `Cross-Origin-Opener-Policy: same-origin`, a
+one-directive `Content-Security-Policy: frame-ancestors 'none'`, and a
+restrictive `Permissions-Policy`.
+
+**That CSP header is not a duplicate of the app's CSP, and it isn't
+belt-and-braces either — it's the only copy that works.** The app's real
+policy is generated by SvelteKit into a `<meta>` tag (see § Content Security
+Policy), and `frame-ancestors` is ignored in a meta CSP by specification.
+SvelteKit knows this and drops the directive when it writes the tag, so on a
+prerendered page — which is every page here — the app's own CSP says nothing
+about framing at all. Verified by reading the built
+`.svelte-kit/output/prerendered/pages/index.html`, which is worth doing after
+any CSP change rather than trusting the config. Two policies delivered by
+different means both apply, and a policy declaring only `frame-ancestors`
+restricts only framing, so this costs nothing else. `X-Frame-Options` stays
+alongside it for older browsers, and `pnpm gates` now checks the header is
+still in the file.
+
+`vercel.json` deliberately does **not** set
+`Cross-Origin-Embedder-Policy: require-corp` or
+`Cross-Origin-Resource-Policy` — both are correct once an app talks to
+nothing but its own origin (see `listula`'s `CLAUDE.md` for that posture),
+but they break loading a third-party image, font, or embed the moment one is
+added, and this skeleton doesn't get to assume that in advance. Add both the
+day the app actually is fully self-origin, not before.
+
+## Deployment (Vercel, Hobby/free tier)
+
+1. **Import the repository** into a new Vercel project. Framework preset
+   SvelteKit; build command and output directory are auto-detected via
+   `@sveltejs/adapter-vercel`. Production deploys from `main`, previews from
+   pull requests — no deploy step in `.github/workflows/ci.yml` on purpose.
+2. **Confirm the free-tier numbers** at `vercel.com/docs/limits` before
+   relying on them. Hobby is for personal, non-commercial use; if this ever
+   earns money it moves to Pro.
+3. **Add environment variables** as the project grows past having none — see
+   `.env.example`. For local development: `vercel link`, then `vercel env
+pull .env.local`.
+4. **Protect `main`**: require CI green before merge, squash merges,
+   conventional commit titles.
+5. **Check the deployed preview** for what only a deploy can show: the
+   response headers from `vercel.json`, Lighthouse on mobile, and (if a
+   manifest is ever added) the installability audit.
+
+## Bootstrapping a new project from this skeleton
+
+See [AGENTS.md § Bootstrapping](./AGENTS.md#bootstrapping), then
+[STACK.md § Bootstrapping, the stack half](./STACK.md#bootstrapping-the-stack-half),
+for the checklist — it's kept there rather than here because it's the thing
+a session picks up on its very first turn in a freshly-templated repo.
+
+## Self-improving: the mechanics
+
+The rationale is in [AGENTS.md § Self-improving: closing the loop](./AGENTS.md#self-improving-closing-the-loop);
+this is how the two pieces actually work.
+
+`scripts/gates.sh` appends one JSON line per run to `.claude/logs/gates.jsonl`
+(gitignored — see `.gitignore`'s comment on it): a timestamp, the short
+commit SHA, overall pass/fail, and a `pass`/`fail` per named check. It's
+built with `printf`/`awk` rather than `jq`, so nothing here depends on a
+tool that might not be on the machine running it. Query it locally, e.g.:
+
+```bash
+jq -s 'group_by(.checks[].name) | map({name: .[0].checks[0].name})' \
+  .claude/logs/gates.jsonl   # crude; a real query groups per check name
+```
+
+or simpler, count failures per check across a session:
+
+```bash
+jq -c '.checks[]' .claude/logs/gates.jsonl | sort | uniq -c
+```
+
+This log is intentionally not uploaded anywhere, not attached to CI, and not
+aggregated across machines — the moment it became infrastructure, it would
+need its own security review, retention policy and opt-out, for a signal
+that's genuinely only useful to whoever is sitting at that keyboard, right
+now, deciding whether a rule still earns its keep.
+
+`TEMPLATE_FEEDBACK.md` is the durable half: committed, human-written (or
+agent-written, prompted by `pnpm feedback "..."`), and read manually,
+periodically, by whoever maintains `osseus` itself — across every project
+templated from it, since each accumulates its own copy. What's proven true
+across more than one project's feedback file is a good candidate to fold
+back into this repo's own `AGENTS.md` or `STACK.md` (whichever layer it
+belongs to), `scripts/gates.sh`, or `vite.config.ts`, and the lesson itself,
+with its evidence, into `docs/LEARNINGS.md`. Then the folded entries are
+deleted from the project's feedback file, which only ever holds what hasn't
+been dealt with.
+
+**What's worth logging, concretely**, if you're wondering what "friction"
+means in practice:
+
+- A gate firing on legitimate code (false positive) vs. actually catching
+  something (true positive) — the former belongs in `TEMPLATE_FEEDBACK.md`
+  even if you just narrow the gate's own pattern rather than removing it.
+- A CSP directive or security header that had to change for a real feature,
+  and what that feature was — this is exactly how **§ Content Security
+  Policy**'s `blob:`/`wasm-unsafe-eval` allowances should have kept
+  happening if this project needed more of them.
+- A dependency added in the first week that "the skeleton should have had" —
+  a strong signal for what to add to `osseus` itself, versus a dependency
+  added for something genuinely project-specific, which isn't.
+- The bundle budget getting raised, and by what feature — a pattern of
+  "every project raises it for X" means either the budget or the default
+  approach to X is wrong.
+- A CI failure that turned out to be the pipeline's fault, not the code's
+  (flaky Playwright step, a cache that went stale) — these are invisible to
+  `gates.jsonl` (CI runners are ephemeral; the log never survives past one
+  run there) and only visible if someone writes them down.
+
+## Known limits
+
+- **No component-level test runner.** `vitest` here covers pure logic only
+  (`src/**/*.test.ts`); components are verified by driving them with
+  Playwright in a real browser, not by mounting them in `jsdom`. Add
+  `@testing-library/svelte` and a `jsdom` environment the day that stops
+  being enough — don't add it speculatively. When you do, keep `node` the
+  default and opt each DOM-needing file in with a first-line
+  `// @vitest-environment jsdom`: `kalendes` had jsdom global, and its
+  per-file setup was over half the suite's wall time (6.8s → 4.5s once only
+  the 10 of 26 files that needed it paid for it).
+- **No PWA / offline support out of the box.** Both sibling projects this
+  skeleton draws from ship one; this one doesn't, because not every app
+  wants the install prompt, the manifest, and the service-worker update
+  dance. Adding one is a `vite-plugin-pwa` install plus a manifest, not an
+  architecture change.
+- **No component library, no CSS framework, no crypto library** — matching
+  the sibling projects. Pull one in deliberately, with the trade-off written
+  down, rather than by default.
+- **Undo is one step, not a stack.** `itemsStore.undoable` holds a single
+  snapshot, taken before a remove or a replace, and any constructive edit
+  retires it — undoing a delete after three further edits would take those
+  edits with it, which isn't what the word means to whoever pressed it. A
+  real editor wants `listula`'s approach (stamp a new change forward rather
+  than rewind) or a proper history; this is the smallest honest version of
+  "anything that can lose data owes a way back".
+- **A failed write is reported, not retried.** If `localStorage.setItem`
+  throws — a full quota, a private window, blocked site data — the store
+  sets `storageBroken` and the page says the list won't survive a reload.
+  There's no retry, no fallback to IndexedDB, and no queue. That's the right
+  size for a skeleton; a project that genuinely can't lose data needs a real
+  strategy, decided deliberately.
+- **The feedback loop is manual, not automatic.** `TEMPLATE_FEEDBACK.md` and
+  `.claude/logs/gates.jsonl` (see § Self-improving) don't report anywhere or
+  aggregate across projects on their own — closing the loop back into
+  `osseus` means someone actually reads a project's feedback file and
+  decides what to change here. That's a deliberate trade against a
+  telemetry pipeline this template has no server to run and no business
+  collecting data through anyway.

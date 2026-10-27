@@ -1,0 +1,65 @@
+/*
+ * Two tokens, one pair of values each, resolved by the browser rather than by
+ * a pre-paint script: no JS, no flash, and no CSP carve-out for an inline
+ * <script> — which is what listula and kalendes both need a `theme.js` for.
+ *
+ * Written as a `prefers-color-scheme` media query rather than with
+ * `light-dark()`, which is the shorter way to say the same thing. That was
+ * the first version of this file and it broke this project's own rule:
+ * `light-dark()` is Baseline *Newly* available and does not reach Baseline
+ * Widely available until 2026-11-13, and its failure mode on an engine
+ * without it is the bad one — the whole declaration is invalid at
+ * computed-value time, so `color: var(--ink)` resolves to nothing and a
+ * dark-scheme browser paints black on black. A media query has been
+ * everywhere for a decade. Revisit after that date; see TECHNICAL.md
+ * § Theming and docs/LEARNINGS.md § Browsers.
+ *
+ * `color-scheme` stays: it is what makes form controls, scrollbars and the
+ * canvas itself follow the theme, and it is long since Widely available.
+ */
+:root {
+	color-scheme: light dark;
+	--ink: #000;
+	--paper: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--ink: #fff;
+		--paper: #000;
+	}
+}
+
+/* A minimal, deliberate reset — not a framework. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100svh;
+	background: var(--paper);
+	color: var(--ink);
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+}
+
+/*
+ * Motion is opt-in, not opt-out: nothing animates by default, and anything
+ * this project adds later should still gate on this query rather than assume
+ * it. See TECHNICAL.md § Baseline browser support.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.001ms !important;
+	}
+}
