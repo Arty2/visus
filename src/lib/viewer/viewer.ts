@@ -139,6 +139,8 @@ export class Viewer {
 	private model: Object3D | null = null;
 	private modelName = '';
 	private readonly bounds = new Box3();
+	/** `bounds` as placed this frame — a cheap first test before any mesh raycast. */
+	private readonly worldBounds = new Box3();
 	private targets: Object3D[] = [];
 	private views: ViewTarget[] = [];
 	private viewIndex = -1;
@@ -149,6 +151,7 @@ export class Viewer {
 	private editing: Editing | null = null;
 	private armedNote = false;
 	private toastUntil = 0;
+	private toastText = '';
 	private lastTime = 0;
 	private desktopPose: { position: Vector3; quaternion: Quaternion; target: Vector3 } | null = null;
 	private addMode = false;
@@ -453,6 +456,9 @@ export class Viewer {
 
 		if (this.toast.mesh.visible && time > this.toastUntil) this.toast.mesh.visible = false;
 
+		this.world.updateMatrixWorld(true);
+		this.worldBounds.copy(this.bounds).applyMatrix4(this.world.matrixWorld);
+
 		const left = this.hands.find((h) => h.source?.handedness === 'left');
 		const right = this.hands.find((h) => h.source?.handedness === 'right');
 
@@ -482,8 +488,8 @@ export class Viewer {
 		if (left) this.leftStick(left, dt);
 
 		if (right) {
-			if (this.edge(right, LOWER)) this.stepView(1);
-			if (this.edge(right, UPPER)) this.stepView(-1);
+			if (this.edge(right, LOWER)) this.stepView(1, right);
+			if (this.edge(right, UPPER)) this.stepView(-1, right);
 		}
 		if (left) {
 			if (this.edge(left, LOWER)) this.addNoteAtPointer(right ?? left);
@@ -561,6 +567,10 @@ export class Viewer {
 		if (note)
 			return { kind: 'note', id: note.object.userData.noteId as string, distance: note.distance };
 		if (!withModel) return null;
+		// Testing every mesh is the expensive part; a ray that misses the
+		// model's box can't hit anything in it. (Empty bounds — no model, or
+		// the desktop before the first XR frame — fall through to the full test.)
+		if (this.presenting && !this.raycaster.ray.intersectsBox(this.worldBounds)) return null;
 		const [hit] = this.raycaster.intersectObjects(this.targets, false);
 		return hit ? modelHit(hit, this.raycaster.ray.direction) : null;
 	}
@@ -568,7 +578,10 @@ export class Viewer {
 	private select(hand: Hand) {
 		const hit = this.pick(hand);
 		if (hit?.kind === 'panel') {
-			if (hit.control) this.press(hit.panel, hit.control.id);
+			if (hit.control) {
+				this.buzz(hand, 0.25, 15);
+				this.press(hit.panel, hit.control.id);
+			}
 			return;
 		}
 		if (hit?.kind === 'note') {
@@ -586,8 +599,10 @@ export class Viewer {
 
 	private addNoteAtPointer(hand: Hand) {
 		const hit = this.pick(hand);
-		if (hit?.kind === 'model') this.placeNote(hit.point);
-		else {
+		if (hit?.kind === 'model') {
+			this.buzz(hand);
+			this.placeNote(hit.point);
+		} else {
 			this.armedNote = true;
 			this.say('Point at the model and pull the trigger to place a note');
 		}
@@ -629,7 +644,10 @@ export class Viewer {
 				hand.aiming = false;
 				this.arc.visible = false;
 				this.marker.visible = false;
-				if (this.teleportTarget) this.teleport(this.teleportTarget);
+				if (this.teleportTarget) {
+					this.buzz(hand, 0.5, 40);
+					this.teleport(this.teleportTarget);
+				}
 				this.teleportTarget = null;
 			} else {
 				this.aimArc(hand);
@@ -664,6 +682,7 @@ export class Viewer {
 		let count = 1;
 		let target: { point: Vector3; onModel: boolean } | null = null;
 		let invalidAt: Vector3 | null = null;
+		const segmentBox = new Box3();
 		positions.setXYZ(0, origin.x, origin.y, origin.z);
 
 		for (let i = 1; i < positions.count; i++) {
@@ -674,15 +693,20 @@ export class Viewer {
 				.addScaledVector(gravity, 0.5 * t * t);
 			const segment = next.clone().sub(previous);
 			const length = segment.length();
-			this.raycaster.set(previous, segment.normalize());
-			this.raycaster.far = length;
-			const [hit] = this.raycaster.intersectObjects(this.targets, false);
-			this.raycaster.far = Infinity;
+			let hit: Intersection | undefined;
+			// Most of an arc is in the air beside the model; only segments
+			// that reach its box are worth testing against every mesh.
+			if (segmentBox.setFromPoints([previous, next]).intersectsBox(this.worldBounds)) {
+				this.raycaster.set(previous, segment.normalize());
+				this.raycaster.far = length;
+				[hit] = this.raycaster.intersectObjects(this.targets, false);
+				this.raycaster.far = Infinity;
+			}
 
 			let end: Vector3 | null = null;
 			if (hit) {
 				end = hit.point;
-				const { normal } = modelHit(hit, this.raycaster.ray.direction);
+				const { normal } = modelHit(hit, segment);
 				if (normal.y > 0.6) target = { point: hit.point.clone(), onModel: true };
 				else invalidAt = hit.point.clone();
 			} else if (previous.y >= floorY && next.y < floorY) {
@@ -742,6 +766,7 @@ export class Viewer {
 			const distance = Math.max(0.01, a.distanceTo(b));
 			const angle = Math.atan2(b.x - a.x, b.z - a.z);
 			if (this.grab.mode !== 'two') {
+				for (const h of held) this.buzz(h, 0.2, 20);
 				this.world.updateMatrix();
 				this.grab = {
 					mode: 'two',
@@ -769,6 +794,8 @@ export class Viewer {
 		if (held.length === 1) {
 			const hand = held[0];
 			if (this.grab.mode !== 'one' || this.grab.hand !== hand) {
+				// Not when one hand of a two-hand grab lets go: nothing new began.
+				if (this.grab.mode === 'none') this.buzz(hand, 0.2, 20);
 				this.grab = { mode: 'one', hand, anchor: at(hand) };
 				return;
 			}
@@ -868,13 +895,14 @@ export class Viewer {
 		return from.setY(this.bounds.min.clone().applyMatrix4(this.world.matrixWorld).y);
 	}
 
-	private stepView(by: number) {
+	private stepView(by: number, hand?: Hand) {
 		const n = this.views.length;
 		if (!n) {
 			this.say('No cameras in this model — save a view from the menu');
 			return;
 		}
 		const next = this.viewIndex < 0 ? (by > 0 ? 0 : n - 1) : (this.viewIndex + by + n) % n;
+		this.buzz(hand);
 		this.goToView(next);
 	}
 
@@ -1067,10 +1095,28 @@ export class Viewer {
 	}
 
 	private say(text: string) {
+		this.toastUntil = this.lastTime + 2200;
+		// Two-hand scaling says the scale every frame. Redrawing a canvas is a
+		// texture upload, so it happens only when the words change.
+		if (text === this.toastText && this.toast.mesh.visible) return;
+		this.toastText = text;
 		this.toast.set([], [{ text, x: 512, y: 56, size: 56, align: 'center' }]);
 		this.toast.mesh.visible = true;
-		this.toastUntil = this.lastTime + 2200;
 		if (this.menu.mesh.visible) this.drawMenu();
+	}
+
+	/**
+	 * A short pulse in the hand that did something — the confirmation a
+	 * button gives by clicking, which a ray pointed at a picture can't.
+	 */
+	private buzz(hand: Hand | undefined, intensity = 0.3, ms = 25) {
+		const actuator = (
+			hand?.source?.gamepad as
+				{ hapticActuators?: { pulse?: (v: number, ms: number) => Promise<boolean> }[] } | undefined
+		)?.hapticActuators?.[0];
+		actuator?.pulse?.(intensity, ms)?.catch(() => {
+			// A controller without a motor, or one asleep: nothing to tell.
+		});
 	}
 }
 
