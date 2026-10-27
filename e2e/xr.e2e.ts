@@ -36,13 +36,18 @@ async function enterVR(page: Page) {
 	await page.waitForTimeout(500);
 }
 
+// Waits for real animation frames, not a fixed time: IWER drives the XR
+// session's frames from them, so a button held across `n` of these has been
+// seen by at least `n - 1` of the app's frames, however slowly a software
+// renderer draws. A fixed delay passed on a quiet machine and missed presses
+// on a busy one.
 async function frames(page: Page, n = 3) {
 	await page.evaluate(
 		(count) =>
 			new Promise<void>((resolve) => {
 				let left = count;
-				const tick = () => (--left <= 0 ? resolve() : setTimeout(tick, 50));
-				tick();
+				const tick = () => (--left <= 0 ? resolve() : requestAnimationFrame(tick));
+				requestAnimationFrame(tick);
 			}),
 		n
 	);
