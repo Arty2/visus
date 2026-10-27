@@ -72,6 +72,18 @@ export class Markers {
 		}
 	}
 
+	/** Draws every label again — after a font has loaded, say. */
+	refresh() {
+		const notes = [...this.markers.entries()].map(([id, m]) => ({
+			id,
+			text: m.text,
+			done: m.done,
+			position: m.pin.position.toArray() as [number, number, number]
+		}));
+		this.clear();
+		this.sync(notes);
+	}
+
 	/** Things a pointer can hit — pins and their labels. */
 	targets(): Object3D[] {
 		if (!this.group.visible) return [];

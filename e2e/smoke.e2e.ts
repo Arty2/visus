@@ -20,6 +20,32 @@ test('the sample opens with the cameras it carries, and a view can be looked fro
 	await expect(page.getByRole('button', { name: 'Bench' })).toHaveAttribute('aria-current', 'true');
 });
 
+test('the background is white unless chosen, and a choice is remembered', async ({ page }) => {
+	await ready(page);
+	await expect(page.getByRole('button', { name: 'White background' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+	await page.getByRole('button', { name: 'Sky background' }).click();
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Sky background' })).toHaveAttribute(
+		'aria-pressed',
+		'true'
+	);
+});
+
+// Icons drawn in the browser once came out as HTML-namespaced <path>s, which
+// draw nothing — invisible, with no error anywhere. See Icon.svelte.
+test('every icon is real SVG, including ones drawn after load', async ({ page }) => {
+	await ready(page);
+	await page.getByRole('button', { name: 'Approach' }).click();
+	await page.getByRole('button', { name: 'Add note' }).click();
+	const namespaces = await page
+		.locator('svg path')
+		.evaluateAll((paths) => [...new Set(paths.map((p) => p.namespaceURI))]);
+	expect(namespaces).toEqual(['http://www.w3.org/2000/svg']);
+});
+
 test('a note placed on the model persists across a reload', async ({ page }) => {
 	await ready(page);
 	await placeNote(page, 'Check the step height');

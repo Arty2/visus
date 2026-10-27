@@ -10,6 +10,7 @@ import {
 	type Vector2
 } from 'three';
 import { theme } from './theme';
+import { icons, type CarbonNode, type IconName } from '$lib/icons';
 
 // Flat UI inside the headset: a canvas drawn with the 2D API and shown as a
 // texture on a plane. DOM overlays don't exist in an immersive VR session,
@@ -26,6 +27,8 @@ export interface Control {
 	/** Drawn as on: the current scale, notes shown. */
 	active?: boolean;
 	disabled?: boolean;
+	/** A Carbon icon, drawn left of the label — or alone, if the label is empty. */
+	icon?: IconName;
 	/**
 	 * primary: the one action a panel exists for; danger: leaving or
 	 * deleting; field: a text box drawn behind a TextLine, not pressable.
@@ -94,6 +97,9 @@ export class Panel {
 		);
 		this.mesh.renderOrder = 10;
 		this.mesh.visible = false;
+		// Drawn again once IBM Plex has loaded: a canvas paints with whatever
+		// font is ready at that moment, and the first draw can beat it.
+		document.fonts?.ready.then(() => this.draw());
 	}
 
 	set(controls: Control[], lines: TextLine[]) {
@@ -157,7 +163,21 @@ export class Panel {
 			ctx.fillStyle = on ? theme.accentInk : c.variant === 'danger' ? theme.danger : theme.text;
 			ctx.textAlign = 'center';
 			ctx.font = `600 ${Math.round(Math.min(c.h * 0.4, 36))}px ${theme.font}`;
-			ctx.fillText(fit(ctx, c.label, c.w - 20), c.x + c.w / 2, c.y + c.h / 2 + 1);
+			const iconSize = Math.round(Math.min(c.h * 0.42, 40));
+			const label = fit(ctx, c.label, c.w - 20 - (c.icon ? iconSize + 12 : 0));
+			const textWidth = label ? ctx.measureText(label).width : 0;
+			const gap = c.icon && label ? 12 : 0;
+			const total = (c.icon ? iconSize : 0) + gap + textWidth;
+			let x = c.x + (c.w - total) / 2;
+			const cy = c.y + c.h / 2;
+			if (c.icon) {
+				drawIcon(ctx, c.icon, x, cy - iconSize / 2, iconSize);
+				x += iconSize + gap;
+			}
+			if (label) {
+				ctx.textAlign = 'left';
+				ctx.fillText(label, x, cy + 1);
+			}
 			ctx.globalAlpha = 1;
 		}
 
@@ -239,4 +259,44 @@ function roundRect(
 ) {
 	ctx.beginPath();
 	ctx.roundRect(x, y, w, h, r);
+}
+
+/**
+ * Draws a Carbon icon in the current fill colour, at (x, y), `size` pixels
+ * square. Carbon draws on a 32-unit grid with paths, circles, rects and
+ * polygons; a rect with fill="none" is its invisible bounding box.
+ */
+export function drawIcon(
+	ctx: CanvasRenderingContext2D,
+	name: IconName,
+	x: number,
+	y: number,
+	size: number
+) {
+	const icon = icons[name];
+	const [, , w] = String(icon.attrs.viewBox).split(' ').map(Number);
+	ctx.save();
+	ctx.translate(x, y);
+	ctx.scale(size / (w || 32), size / (w || 32));
+	const draw = (n: CarbonNode) => {
+		const a = n.attrs;
+		if (a.fill === 'none') return;
+		const path = new Path2D();
+		if (n.elem === 'path') path.addPath(new Path2D(String(a.d)));
+		else if (n.elem === 'circle') path.arc(+a.cx, +a.cy, +a.r, 0, Math.PI * 2);
+		else if (n.elem === 'rect') path.rect(+(a.x ?? 0), +(a.y ?? 0), +a.width, +a.height);
+		else if (n.elem === 'polygon') {
+			const p = String(a.points)
+				.trim()
+				.split(/[\s,]+/)
+				.map(Number);
+			path.moveTo(p[0], p[1]);
+			for (let i = 2; i < p.length; i += 2) path.lineTo(p[i], p[i + 1]);
+			path.closePath();
+		}
+		ctx.fill(path, a['fill-rule'] === 'evenodd' ? 'evenodd' : 'nonzero');
+		n.content?.forEach(draw);
+	};
+	icon.content.forEach(draw);
+	ctx.restore();
 }

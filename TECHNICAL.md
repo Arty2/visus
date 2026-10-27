@@ -142,10 +142,12 @@ under `packages[""]` — and should add it to the gate, regenerating with
 ## Theming: dark, and only dark
 
 visus has one theme. `src/app.css` sets `color-scheme: dark` and a set of
-tokens on `:root` — surfaces, lines, text, one mint accent for anything
-that can be acted on, amber for notes — with no `prefers-color-scheme`
-branch. A headset browser is used in a dim room, a model reads best against
-a dark frame, and one theme designed properly beats two done by halves.
+tokens on `:root` — surfaces, lines, text, IBM's orange 40 for anything
+that can be acted on, purple 40 for notes — with no `prefers-color-scheme`
+branch. Type is IBM Plex Sans and Plex Mono, self-hosted. A headset
+browser is used in a dim room, and one theme designed properly beats two
+done by halves. The model itself is seen against white unless chosen
+otherwise (`src/lib/viewer/backdrop.ts`).
 With one set of values there's nothing to choose before first paint, so no
 theme script and no flash.
 
@@ -362,15 +364,17 @@ osseus starts with none and asks that each be a decision. visus decided, in
 indexes, XR input, schema checks — are better taken than hand-rolled. Each
 one, and what it replaced:
 
-| Library             | Does                                                                             | Replaced                                     |
-| ------------------- | -------------------------------------------------------------------------------- | -------------------------------------------- |
-| `three`             | Scene, renderer, WebXR session, glTF/COLLADA loaders                             | —                                            |
-| `camera-controls`   | Desktop orbit, pan, zoom-to-cursor, animated fly-to                              | three's `OrbitControls`; jumps between views |
-| `valibot`           | Schemas for notes, views and imported files; types from them                     | Hand-written type guards                     |
-| `idb-keyval`        | IndexedDB for the last model opened                                              | Hand-written request plumbing                |
-| three's loaders     | FBX, OBJ + MTL; Draco, Meshopt and KTX2 decoders                                 | Refusing those files                         |
-| `three-mesh-bvh`    | Spatial index on every mesh; fast raycasts and walking                           | Testing every triangle, every frame          |
-| `@gltf-transform/*` | Optimising many-mesh models on open: dedup, instance, flatten, join, weld, prune | Drawing every exported mesh separately       |
+| Library                                                           | Does                                                                                             | Replaced                                     |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| `three`                                                           | Scene, renderer, WebXR session, glTF/COLLADA loaders                                             | —                                            |
+| `camera-controls`                                                 | Desktop orbit, pan, zoom-to-cursor, animated fly-to                                              | three's `OrbitControls`; jumps between views |
+| `valibot`                                                         | Schemas for notes, views and imported files; types from them                                     | Hand-written type guards                     |
+| `idb-keyval`                                                      | IndexedDB for the last model opened                                                              | Hand-written request plumbing                |
+| three's loaders                                                   | FBX, OBJ + MTL; Draco, Meshopt and KTX2 decoders                                                 | Refusing those files                         |
+| `three-mesh-bvh`                                                  | Spatial index on every mesh; fast raycasts and walking                                           | Testing every triangle, every frame          |
+| `@gltf-transform/*`                                               | Optimising many-mesh models on open: dedup, instance, flatten, join, weld, prune                 | Drawing every exported mesh separately       |
+| `@carbon/icons`                                                   | IBM Carbon's icons, on the page (`Icon.svelte`) and drawn into the headset's panels (`panel.ts`) | Hand-drawn SVG paths                         |
+| `@fontsource/ibm-plex-mono`, `@fontsource-variable/ibm-plex-sans` | IBM Plex, served from this origin                                                                | The system font                              |
 
 **glTF-Transform without its pixel tools.** Its functions package imports
 `ndarray-pixels` and `ndarray-lanczos` for texture work, and `ndarray-ops`
@@ -380,6 +384,17 @@ aliases all three to `src/lib/viewer/no-pixels.ts`, which throws if called;
 `optimise.ts` uses none of them and tells `prune` to keep solid textures,
 its one route to pixels. `e2e/models.e2e.ts` runs the optimiser under the
 real policy, so a change that reaches for them fails a test.
+
+**Carbon's install telemetry stays off.** `@carbon/icons` depends on
+`@ibm/telemetry-js`, which runs at install to report usage to IBM. pnpm runs
+no dependency's install script unless `pnpm-workspace.yaml` lists it in
+`onlyBuiltDependencies`, and it isn't listed there — keep it that way.
+
+**Icons are built element by element.** `Icon.svelte` renders Carbon's
+description of each icon (`elem`, `attrs`) with `<svelte:element>`, never
+markup strings, and sets `xmlns` explicitly: without it, an icon created in
+the browser rather than prerendered gets HTML-namespaced `<path>`s that
+draw nothing. `e2e/smoke.e2e.ts` checks every path on the page is SVG.
 
 One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
 to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two

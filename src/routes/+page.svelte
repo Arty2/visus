@@ -9,6 +9,7 @@
 	import type { ViewTarget } from '$lib/viewer/views';
 	import WhatsNew from '$lib/WhatsNew.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import { BACKDROP_ORDER, BACKDROPS, isBackdrop, type Backdrop } from '$lib/viewer/backdrop';
 
 	let container: HTMLDivElement | undefined = $state();
 	let modelInput: HTMLInputElement | undefined = $state();
@@ -33,6 +34,21 @@
 	/** What optimising did to the model just opened, in a sentence. */
 	let optimiseNote = $state('');
 	const OPTIMISE_KEY = 'visus:optimise';
+
+	/** What the model is seen against; white unless chosen otherwise. */
+	let backdrop: Backdrop = $state('white');
+	const BACKDROP_KEY = 'visus:backdrop';
+
+	function setBackdrop(kind: Backdrop, remember = true) {
+		backdrop = kind;
+		viewer?.setBackdrop(kind);
+		if (!remember) return;
+		try {
+			localStorage.setItem(BACKDROP_KEY, kind);
+		} catch {
+			// A preference that won't stick is no reason to interrupt anyone.
+		}
+	}
 
 	function setOptimise(on: boolean) {
 		optimiseOn = on;
@@ -74,6 +90,8 @@
 	onMount(() => {
 		try {
 			optimiseOn = localStorage.getItem(OPTIMISE_KEY) !== 'off';
+			const saved = localStorage.getItem(BACKDROP_KEY);
+			if (isBackdrop(saved)) backdrop = saved;
 		} catch {
 			// Storage refused: the default stands.
 		}
@@ -97,9 +115,11 @@
 				saveView: (position, yaw) => notesStore.addViewpoint(position, yaw),
 				viewChanged: (index) => (currentViewId = views[index]?.id ?? null),
 				noteSelected: (id) => void focusNote(id),
-				sessionChanged: (active) => (inVR = active)
+				sessionChanged: (active) => (inVR = active),
+				backdropChanged: (kind) => setBackdrop(kind)
 			});
 			created.notesById = (id) => notesStore.annotations.find((a) => a.id === id);
+			created.setBackdrop(backdrop);
 			viewer = created;
 			// Fetched now, while the person looks at the sample, rather than on
 			// their first Open: five formats and three decoders are a large
@@ -298,7 +318,7 @@
 				disabled={!viewer || !xrSupported || inVR}
 				aria-describedby="vr-hint"
 			>
-				<Icon name="headset" />
+				<Icon name="vr" />
 				<span>Enter VR</span>
 			</button>
 		</div>
@@ -329,17 +349,36 @@
 				</p>
 			</div>
 
-			{#if addMode}
-				<p class="hud bottom chip note-chip" role="status">
-					<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
-				</p>
-			{:else if views[currentView]}
-				<p class="hud bottom chip">
-					<Icon name="camera" size={18} />
-					{views[currentView].name}
-					<span class="chip-meta">{currentView + 1} / {views.length}</span>
-				</p>
-			{/if}
+			<div class="hud bottom">
+				{#if addMode}
+					<p class="chip note-chip" role="status">
+						<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
+					</p>
+				{:else if views[currentView]}
+					<p class="chip">
+						<Icon name="camera" size={18} />
+						{views[currentView].name}
+						<span class="chip-meta">{currentView + 1} / {views.length}</span>
+					</p>
+				{:else}
+					<span></span>
+				{/if}
+
+				<div class="backdrops chip" role="group" aria-label="Background">
+					{#each BACKDROP_ORDER as kind (kind)}
+						<button
+							type="button"
+							class="backdrop"
+							aria-pressed={backdrop === kind}
+							aria-label={`${BACKDROPS[kind].label} background`}
+							title={BACKDROPS[kind].label}
+							onclick={() => setBackdrop(kind)}
+						>
+							<Icon name={BACKDROPS[kind].icon} size={18} />
+						</button>
+					{/each}
+				</div>
+			</div>
 		</section>
 
 		<aside class="sidebar">
@@ -572,7 +611,7 @@
 	</header>
 	<div class="help-columns">
 		<section>
-			<h3><Icon name="headset" size={18} /> In VR, Touch controllers</h3>
+			<h3><Icon name="vr" size={18} /> In VR, Touch controllers</h3>
 			<dl>
 				<dt><kbd>L</kbd> stick</dt>
 				<dd>Walk where you look</dd>
@@ -649,10 +688,10 @@
 		height: 2.75rem;
 		border-radius: 13px;
 		color: var(--accent-ink);
-		background: linear-gradient(135deg, #7cf5dc, var(--accent) 55%, #2bb79c);
+		background: linear-gradient(135deg, #ffb27a, var(--accent) 55%, #e2600c);
 		box-shadow:
-			0 0 0 1px rgba(78, 230, 200, 0.4),
-			0 8px 28px rgba(78, 230, 200, 0.25);
+			0 0 0 1px rgba(255, 131, 43, 0.45),
+			0 8px 28px rgba(255, 131, 43, 0.28);
 	}
 
 	h1 {
@@ -708,12 +747,12 @@
 		background: var(--accent);
 		border-color: var(--accent);
 		color: var(--accent-ink);
-		box-shadow: 0 6px 24px rgba(78, 230, 200, 0.22);
+		box-shadow: 0 6px 24px rgba(255, 131, 43, 0.24);
 	}
 
 	.btn.primary:hover:not(:disabled) {
-		background: #6ff0d6;
-		border-color: #6ff0d6;
+		background: #ff9a52;
+		border-color: #ff9a52;
 	}
 
 	.btn:disabled,
@@ -818,7 +857,9 @@
 		border: 1px solid var(--line);
 		border-radius: calc(var(--radius) + 4px);
 		overflow: hidden;
-		background: #161b22;
+		/* White like the default background, so the frame before the first
+		   render doesn't flash dark. */
+		background: #ffffff;
 		box-shadow:
 			inset 0 0 0 1px rgba(255, 255, 255, 0.02),
 			0 30px 80px rgba(0, 0, 0, 0.45);
@@ -872,10 +913,36 @@
 
 	.hud.bottom {
 		bottom: 1rem;
-		left: 50%;
-		right: auto;
-		transform: translateX(-50%);
-		white-space: nowrap;
+		align-items: flex-end;
+	}
+
+	/* The background picker is the one part of the HUD that takes clicks. */
+	.backdrops {
+		gap: 0.2rem;
+		padding: 0.25rem;
+		pointer-events: auto;
+	}
+
+	.backdrop {
+		display: grid;
+		place-items: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		background: none;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+
+	.backdrop:hover {
+		color: var(--text);
+		background: var(--surface-hover);
+	}
+
+	.backdrop[aria-pressed='true'] {
+		background: var(--accent);
+		color: var(--accent-ink);
 	}
 
 	.chip {

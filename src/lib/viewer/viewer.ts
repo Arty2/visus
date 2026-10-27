@@ -27,9 +27,7 @@ import {
 	Vector3,
 	WebGLRenderer,
 	type Intersection,
-	type Material,
-	type Object3D,
-	type Texture
+	type Object3D
 } from 'three';
 import CameraControls from 'camera-controls';
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree } from 'three-mesh-bvh';
@@ -38,6 +36,8 @@ import type { Annotation, Vec3 } from '$lib/store/notes';
 import { autoShift, keyboardRows, pressKey } from './keyboard';
 import { Markers } from './markers';
 import { Panel, type Control } from './panel';
+import { disposeScene } from './dispose';
+import type { IconName } from '$lib/icons';
 import {
 	fitScale,
 	forwardOf,
@@ -50,6 +50,8 @@ import {
 } from './rig';
 import type { ViewTarget } from './views';
 import { hex } from './theme';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { BACKDROPS, nextBackdrop, type Backdrop } from './backdrop';
 
 /**
  * What the viewer asks of the page. The viewer draws and handles input; the
@@ -67,6 +69,8 @@ export interface ViewerHooks {
 	viewChanged(index: number): void;
 	noteSelected(id: string): void;
 	sessionChanged(active: boolean): void;
+	/** The background was changed from the headset's menu. */
+	backdropChanged(backdrop: Backdrop): void;
 }
 
 // camera-controls takes the three.js classes it needs rather than importing
@@ -85,6 +89,12 @@ BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
 Mesh.prototype.raycast = acceleratedRaycast;
 
 const UP = new Vector3(0, 1, 0);
+const KEY_ICONS: Partial<Record<string, IconName>> = {
+	shift: 'shift',
+	backspace: 'backspace',
+	save: 'check',
+	cancel: 'close'
+};
 /** The tallest step walking climbs by itself, metres. */
 const STEP = 0.45;
 /** How close walking lets you come to a wall, metres. */
@@ -165,6 +175,10 @@ export class Viewer {
 	private readonly keyboard = new Panel(1024, 684, 0.62);
 	private readonly toast = new Panel(1024, 120, 0.36);
 	private grid: GridHelper | null = null;
+	private gridSpec: { size: number; cells: number; at: Vector3 } | null = null;
+	private backdrop: Backdrop = 'white';
+	private sky: Sky | null = null;
+	private readonly sun = new DirectionalLight(0xffffff, 1.6);
 
 	private model: Object3D | null = null;
 	private modelName = '';
@@ -205,15 +219,14 @@ export class Viewer {
 		canvas.tabIndex = 0;
 		container.append(canvas);
 
-		this.scene.background = new Color(hex.sky);
+		this.scene.background = new Color(BACKDROPS.white.colour);
 		const pmrem = new PMREMGenerator(renderer);
 		this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 		this.scene.environmentIntensity = 0.5;
 		pmrem.dispose();
 		this.scene.add(new HemisphereLight(0xffffff, 0x8d8a80, 1.4));
-		const sun = new DirectionalLight(0xffffff, 1.6);
-		sun.position.set(5, 10, 7);
-		this.scene.add(sun);
+		this.sun.position.set(5, 10, 7);
+		this.scene.add(this.sun);
 
 		this.camera = new PerspectiveCamera(60, 1, 0.05, 2000);
 		this.camera.position.set(8, 6, 10);
@@ -265,6 +278,9 @@ export class Viewer {
 		this.resizeObserver.observe(container);
 		this.resize();
 
+		// Labels drawn before IBM Plex arrived are drawn again once it has.
+		document.fonts?.ready.then(() => this.markers.refresh());
+
 		renderer.setAnimationLoop((time) => this.frame(time));
 	}
 
@@ -273,16 +289,15 @@ export class Viewer {
 	setModel(root: Object3D | null, name = '') {
 		if (this.model) {
 			this.world.remove(this.model);
-			dispose(this.model);
+			disposeScene(this.model);
 		}
 		this.model = root;
 		this.modelName = name;
 		this.resetWorld();
 		this.targets = [];
 		this.bounds.makeEmpty();
-		this.grid?.removeFromParent();
-		this.grid?.dispose();
-		this.grid = null;
+		this.gridSpec = null;
+		this.makeGrid();
 		if (!root) return;
 
 		this.world.add(root);
@@ -306,9 +321,12 @@ export class Viewer {
 		const span = Math.max(size.x, size.z) * 1.6 + 10;
 		const cell = span > 300 ? 10 : 1;
 		const cells = Math.min(400, Math.ceil(span / cell));
-		this.grid = new GridHelper(cells * cell, cells, hex.gridMajor, hex.gridMinor);
-		this.grid.position.set(center.x, this.bounds.min.y - 0.002, center.z);
-		this.world.add(this.grid);
+		this.gridSpec = {
+			size: cells * cell,
+			cells,
+			at: new Vector3(center.x, this.bounds.min.y - 0.002, center.z)
+		};
+		this.makeGrid();
 
 		this.camera.near = Math.max(0.01, extent / 5000);
 		this.camera.far = Math.max(2000, extent * 20);
@@ -324,6 +342,50 @@ export class Viewer {
 				.addScaledVector(new Vector3(0.9, 0.6, 1).normalize(), extent * 1.4);
 			void this.controls.setLookAt(eye.x, eye.y, eye.z, center.x, center.y, center.z, false);
 		}
+	}
+
+	/**
+	 * What the model is seen against. The sky is three.js's physical sky
+	 * shader (Preetham): drawn at infinity whatever its scale, and the sun
+	 * light is turned to stand where the sky draws its sun, so shadows-to-be
+	 * and shading agree with what's seen.
+	 */
+	setBackdrop(backdrop: Backdrop) {
+		this.backdrop = backdrop;
+		const style = BACKDROPS[backdrop];
+		if (backdrop === 'sky') {
+			if (!this.sky) {
+				this.sky = new Sky();
+				this.sky.scale.setScalar(10_000);
+				const u = this.sky.material.uniforms;
+				u.turbidity.value = 2.5;
+				u.rayleigh.value = 1.2;
+				u.mieCoefficient.value = 0.004;
+				u.mieDirectionalG.value = 0.85;
+				const sunAt = new Vector3().setFromSphericalCoords(1, Math.PI / 2 - 0.6, 2.4);
+				u.sunPosition.value.copy(sunAt);
+				this.sun.position.copy(sunAt).multiplyScalar(20);
+			}
+			this.scene.add(this.sky);
+			this.scene.background = null;
+		} else {
+			this.sky?.removeFromParent();
+			this.scene.background = new Color(style.colour);
+			this.sun.position.set(5, 10, 7);
+		}
+		this.makeGrid();
+		if (this.menu.mesh.visible) this.drawMenu();
+	}
+
+	private makeGrid() {
+		this.grid?.removeFromParent();
+		this.grid?.dispose();
+		this.grid = null;
+		if (!this.gridSpec) return;
+		const { grid } = BACKDROPS[this.backdrop];
+		this.grid = new GridHelper(this.gridSpec.size, this.gridSpec.cells, grid.major, grid.minor);
+		this.grid.position.copy(this.gridSpec.at);
+		this.world.add(this.grid);
 	}
 
 	setViews(views: ViewTarget[]) {
@@ -1086,12 +1148,12 @@ export class Viewer {
 		this.menu.set(
 			[
 				...row(196, [
-					{ id: 'prev', label: '◀  Previous', disabled: noViews },
-					{ id: 'save-view', label: 'Save view' },
-					{ id: 'next', label: 'Next  ▶', disabled: noViews }
+					{ id: 'prev', label: 'Previous', icon: 'chevronLeft', disabled: noViews },
+					{ id: 'save-view', label: 'Save view', icon: 'bookmark' },
+					{ id: 'next', label: 'Next', icon: 'chevronRight', disabled: noViews }
 				]),
 				...row(356, [
-					{ id: 'fit', label: 'Fit' },
+					{ id: 'fit', label: 'Fit', icon: 'fit' },
 					{ id: 'scale:1', label: '1:1', active: s === 1 },
 					...MENU_SCALES.map((m) => ({ id: `scale:${m}`, label: scaleLabel(m), active: s === m }))
 				]),
@@ -1099,13 +1161,23 @@ export class Viewer {
 					{
 						id: 'add-note',
 						label: this.armedNote ? 'Placing…' : 'Add note',
+						icon: 'pin',
 						active: this.armedNote
 					},
-					{ id: 'notes', label: shown ? 'Hide notes' : 'Show notes' }
+					{
+						id: 'notes',
+						label: shown ? 'Hide notes' : 'Show notes',
+						icon: shown ? 'viewOff' : 'view'
+					},
+					{
+						id: 'backdrop',
+						label: BACKDROPS[this.backdrop].label,
+						icon: BACKDROPS[this.backdrop].icon
+					}
 				]),
 				...row(648, [
-					{ id: 'close', label: 'Close menu' },
-					{ id: 'exit', label: 'Exit VR', variant: 'danger' }
+					{ id: 'close', label: 'Close menu', icon: 'close' },
+					{ id: 'exit', label: 'Exit VR', icon: 'exit', variant: 'danger' }
 				])
 			],
 			[
@@ -1131,7 +1203,7 @@ export class Viewer {
 				},
 				section('VIEWS', 174),
 				section('SCALE', 334),
-				section('NOTES', 494),
+				section('NOTES  ·  BACKGROUND', 494),
 				{
 					text: 'A B views   ·   X note   ·   Y menu   ·   grips grab and scale',
 					x: 512,
@@ -1159,7 +1231,10 @@ export class Viewer {
 			this.armedNote = !this.armedNote;
 			if (this.armedNote) this.say('Point at the model and pull the trigger');
 		} else if (id === 'notes') this.markers.group.visible = !this.markers.group.visible;
-		else if (id === 'close') this.menu.mesh.visible = false;
+		else if (id === 'backdrop') {
+			this.setBackdrop(nextBackdrop(this.backdrop));
+			this.hooks.backdropChanged(this.backdrop);
+		} else if (id === 'close') this.menu.mesh.visible = false;
 		else if (id === 'exit') this.exitVR();
 		if (this.menu.mesh.visible) this.drawMenu();
 	}
@@ -1225,8 +1300,25 @@ export class Viewer {
 		const controls: Control[] = [];
 		if (!e.isNew) {
 			controls.push(
-				{ id: 'resolve', label: e.done ? 'Reopen' : 'Resolve', x: 600, y: 22, w: 190, h: 60 },
-				{ id: 'delete', label: 'Delete', x: 810, y: 22, w: 190, h: 60, variant: 'danger' }
+				{
+					id: 'resolve',
+					label: e.done ? 'Reopen' : 'Resolve',
+					icon: e.done ? 'undo' : 'check',
+					x: 600,
+					y: 22,
+					w: 190,
+					h: 60
+				},
+				{
+					id: 'delete',
+					label: 'Delete',
+					icon: 'trash',
+					x: 810,
+					y: 22,
+					w: 190,
+					h: 60,
+					variant: 'danger'
+				}
 			);
 		}
 		controls.push({
@@ -1245,7 +1337,9 @@ export class Viewer {
 				const w = key.span * unit + (key.span - 1) * gap;
 				controls.push({
 					id: key.id,
-					label: key.label,
+					// Keys that act rather than type show Carbon's icon instead.
+					label: KEY_ICONS[key.id] && key.id !== 'save' && key.id !== 'cancel' ? '' : key.label,
+					icon: KEY_ICONS[key.id],
 					x,
 					y: 214 + r * 92,
 					w,
@@ -1308,22 +1402,4 @@ function modelHit(hit: Intersection, along: Vector3): Extract<Hit, { kind: 'mode
 
 function deadzone(v: number): number {
 	return Math.abs(v) < DEADZONE ? 0 : v;
-}
-
-function dispose(root: Object3D) {
-	root.traverse((o) => {
-		const mesh = o as Mesh;
-		if (!mesh.isMesh) return;
-		mesh.geometry?.disposeBoundsTree?.();
-		mesh.geometry?.dispose();
-		const materials = (
-			Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-		) as Material[];
-		for (const m of materials) {
-			for (const value of Object.values(m)) {
-				if ((value as Texture | null)?.isTexture) (value as Texture).dispose();
-			}
-			m.dispose();
-		}
-	});
 }

@@ -12,6 +12,7 @@ import { modelKey } from '$lib/store/notes';
 import { extension, isImage, pickMain, resourceKey } from './files';
 import { camerasIn, type ViewTarget } from './views';
 import { count, hasCompressedTextures, optimise, shouldOptimise, type Counts } from './optimise';
+import { disposeScene } from './dispose';
 
 export interface LoadedModel {
 	root: Object3D;
@@ -124,8 +125,10 @@ export async function loadFiles(
 	const before = count(root);
 	if (options.optimise && shouldOptimise(before, hasCompressedTextures(root))) {
 		try {
+			const original = root;
 			root = await optimise(root);
 			optimised = { before, after: count(root) };
+			disposeScene(original);
 		} catch (err) {
 			// The model as it came is still a model: show it, and say why it
 			// wasn't made faster.

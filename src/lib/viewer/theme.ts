@@ -9,25 +9,22 @@ export const theme = {
 	line: '#2d3a48',
 	text: '#e8eef5',
 	dim: '#9aa8b8',
-	accent: '#4ee6c8',
-	accentInk: '#03130f',
-	accentSoft: 'rgba(78, 230, 200, 0.16)',
-	note: '#ffb547',
+	accent: '#ff832b',
+	accentInk: '#1c0f00',
+	accentSoft: 'rgba(255, 131, 43, 0.16)',
+	note: '#be95ff',
 	danger: '#ff7a7a',
 	dangerSoft: 'rgba(255, 107, 107, 0.14)',
-	font: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-	mono: 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace'
+	font: '"IBM Plex Sans Variable", system-ui, sans-serif',
+	mono: '"IBM Plex Mono", ui-monospace, monospace'
 } as const;
 
 // The same palette as numbers, for three.js materials.
 export const hex = {
-	sky: 0x161b22,
-	gridMajor: 0x3d4b59,
-	gridMinor: 0x26303b,
-	accent: 0x4ee6c8,
+	accent: 0xff832b,
 	danger: 0xff6b6b,
-	note: 0xffb547,
+	note: 0xbe95ff,
 	noteDone: 0x5d6a79,
-	ray: 0xbff7ec,
+	ray: 0xffd2b0,
 	grip: 0x1a222c
 } as const;

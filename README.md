@@ -88,6 +88,14 @@ Hand tracking works for pointing and pinching at the menu and keyboard;
 pinching at empty space opens the menu. Walking, teleporting and scaling
 need the controllers.
 
+## Background
+
+The model is shown against white unless you choose otherwise. The four
+buttons in the corner of the view switch between **White**, **Studio**
+(a mid grey), **Sky** (a daylight sky, with the sun lighting the model from
+where it's drawn) and **Night**; in the headset, the menu's background
+button steps through the same four. The choice is remembered.
+
 ## On a screen
 
 The same page works without a headset. Drag or the arrow keys to orbit,
