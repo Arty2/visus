@@ -8,6 +8,9 @@
 	import type { ViewTarget } from '$lib/viewer/views';
 	import WhatsNew from '$lib/WhatsNew.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import type { IconName } from '$lib/icons';
+	import { SKETCH_COLOURS } from '$lib/viewer/sketch';
+	import type { SketchTool } from '$lib/viewer/viewer';
 	import Tip from '$lib/Tip.svelte';
 	import { Dialog, Switch, ToggleGroup, Tooltip } from 'bits-ui';
 	import { BACKDROP_ORDER, BACKDROPS, isBackdrop, type Backdrop } from '$lib/viewer/backdrop';
@@ -27,6 +30,28 @@
 	let xrError = $state('');
 	let inVR = $state(false);
 	let addMode = $state(false);
+	/** The sketch tool in hand on a screen, if any — and its colour. */
+	let tool: SketchTool | null = $state(null);
+	let colour: string = $state(SKETCH_COLOURS[0].hex);
+	const COLOUR_KEY = 'visus:colour';
+
+	const TOOLS: { id: SketchTool; label: string; icon: IconName }[] = [
+		{ id: 'pen', label: 'Pen', icon: 'pen' },
+		{ id: 'line', label: 'Line', icon: 'line' },
+		{ id: 'arrow', label: 'Arrow', icon: 'arrow' },
+		{ id: 'rect', label: 'Rectangle', icon: 'rect' },
+		{ id: 'ellipse', label: 'Ellipse', icon: 'ellipse' },
+		{ id: 'erase', label: 'Eraser', icon: 'erase' }
+	];
+
+	function setColour(hex: string) {
+		colour = hex;
+		try {
+			localStorage.setItem(COLOUR_KEY, hex);
+		} catch {
+			// A preference that won't stick is no reason to interrupt anyone.
+		}
+	}
 	// By id, not index: deleting a saved view shifts the ones after it.
 	let currentViewId: string | null = $state(null);
 	let importError = $state('');
@@ -67,6 +92,7 @@
 	// Escape leaves note-placing mode — the way out a crosshair cursor implies.
 	function onKey(event: KeyboardEvent) {
 		if (event.key === 'Escape' && addMode) addMode = false;
+		if (event.key === 'Escape' && tool) tool = null;
 		// Ctrl/Cmd+Z steps back through every change to the notes, views and
 		// sketches; with Shift (or Ctrl+Y), forward again. Not while typing:
 		// a text field's own undo is the one meant there.
@@ -83,7 +109,8 @@
 		...fileViews,
 		...notesStore.viewpoints.map((v) => ({ ...v, pitch: 0, saved: true }))
 	]);
-	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+	const plural = (n: number, word: string) =>
+		`${n} ${word}${n === 1 ? '' : word.endsWith('h') ? 'es' : 's'}`;
 	const noNotes = $derived(notesStore.annotations.length === 0);
 	const currentView = $derived(views.findIndex((v) => v.id === currentViewId));
 
@@ -97,12 +124,28 @@
 	$effect(() => {
 		viewer?.setAddMode(addMode);
 	});
+	$effect(() => {
+		viewer?.setSketches(notesStore.sketches);
+	});
+	$effect(() => {
+		viewer?.setTool(tool, colour);
+	});
+	// Placing a note and drawing are both "a press on the model means…":
+	// one at a time.
+	$effect(() => {
+		if (addMode) tool = null;
+	});
+	$effect(() => {
+		if (tool) addMode = false;
+	});
 
 	onMount(() => {
 		try {
 			optimiseOn = localStorage.getItem(OPTIMISE_KEY) !== 'off';
 			const saved = localStorage.getItem(BACKDROP_KEY);
 			if (isBackdrop(saved)) backdrop = saved;
+			const savedColour = localStorage.getItem(COLOUR_KEY);
+			if (SKETCH_COLOURS.some((c) => c.hex === savedColour)) colour = savedColour!;
 		} catch {
 			// Storage refused: the default stands.
 		}
@@ -127,7 +170,9 @@
 				viewChanged: (index) => (currentViewId = views[index]?.id ?? null),
 				noteSelected: (id) => void focusNote(id),
 				sessionChanged: (active) => (inVR = active),
-				backdropChanged: (kind) => setBackdrop(kind)
+				backdropChanged: (kind) => setBackdrop(kind),
+				addSketch: (kind, hex, points, normal) => notesStore.addSketch(kind, hex, points, normal),
+				removeSketch: (id) => notesStore.removeSketch(id)
 			});
 			created.notesById = (id) => notesStore.annotations.find((a) => a.id === id);
 			created.setBackdrop(backdrop);
@@ -365,8 +410,60 @@
 					</p>
 				</div>
 
+				<!-- Sketch tools: a rail down the left of the view. Choosing the
+				     tool in hand again puts it down. -->
+				<div class="hud side">
+					<ToggleGroup.Root
+						type="single"
+						class="rail"
+						aria-label="Sketch tools"
+						orientation="vertical"
+						value={tool ?? ''}
+						onValueChange={(id) => (tool = TOOLS.find((t) => t.id === id)?.id ?? null)}
+						disabled={!viewer || !modelName || inVR}
+					>
+						{#each TOOLS as t (t.id)}
+							<Tip label={t.label}>
+								{#snippet children(props)}
+									<ToggleGroup.Item {...props} value={t.id} class="tool" aria-label={t.label}>
+										<Icon name={t.icon} size={18} />
+									</ToggleGroup.Item>
+								{/snippet}
+							</Tip>
+						{/each}
+					</ToggleGroup.Root>
+					<ToggleGroup.Root
+						type="single"
+						class="rail"
+						aria-label="Sketch colour"
+						orientation="vertical"
+						value={colour}
+						onValueChange={(hex) => {
+							if (SKETCH_COLOURS.some((c) => c.hex === hex)) setColour(hex);
+						}}
+					>
+						{#each SKETCH_COLOURS as c (c.hex)}
+							<Tip label={c.name}>
+								{#snippet children(props)}
+									<ToggleGroup.Item {...props} value={c.hex} class="swatch" aria-label={c.name}>
+										<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+											<circle cx="8" cy="8" r="7" fill={c.hex} stroke="rgba(255,255,255,0.5)" />
+										</svg>
+									</ToggleGroup.Item>
+								{/snippet}
+							</Tip>
+						{/each}
+					</ToggleGroup.Root>
+				</div>
+
 				<div class="hud bottom">
-					{#if addMode}
+					{#if tool}
+						<p class="chip note-chip" role="status">
+							<Icon name={TOOLS.find((t) => t.id === tool)!.icon} size={18} />
+							{tool === 'erase' ? 'Click a sketch to erase it' : 'Drag on the model to draw'} ·
+							<kbd>Esc</kbd> to stop
+						</p>
+					{:else if addMode}
 						<p class="chip note-chip" role="status">
 							<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
 						</p>
@@ -563,6 +660,17 @@
 						</ul>
 					{/if}
 
+					<div class="sketch-row">
+						<Icon name="draw" size={18} />
+						<span>{plural(notesStore.sketches.length, 'sketch')}</span>
+						<button
+							type="button"
+							class="btn small"
+							onclick={() => notesStore.clearSketches()}
+							disabled={!notesStore.sketches.length}>Clear sketches</button
+						>
+					</div>
+
 					<div class="card-foot">
 						<button
 							type="button"
@@ -584,7 +692,7 @@
 								type="button"
 								class="btn small"
 								onclick={exportJSON}
-								disabled={noNotes && !notesStore.viewpoints.length}
+								disabled={noNotes && !notesStore.viewpoints.length && !notesStore.sketches.length}
 							>
 								<Icon name="download" size={18} />
 								<span><span class="sr">Export </span>JSON</span>
@@ -677,6 +785,8 @@
 						<dd>Scale and turn the model</dd>
 						<dt>Trigger</dt>
 						<dd>Press menu buttons, keys, or a note to edit it</dd>
+						<dt>Menu → Draw</dt>
+						<dd>Then hold the trigger to draw in the air</dd>
 					</dl>
 				</section>
 				<section>
@@ -692,6 +802,10 @@
 						<dd>Fly to it</dd>
 						<dt>Add note</dt>
 						<dd>Then click the model; <kbd>Esc</kbd> cancels</dd>
+						<dt>A sketch tool</dt>
+						<dd>Drag on the model; <kbd>Esc</kbd> puts it down</dd>
+						<dt><kbd>Ctrl</kbd> <kbd>Z</kbd></dt>
+						<dd>Undo; with <kbd>⇧</kbd>, redo</dd>
 					</dl>
 				</section>
 			</div>
@@ -938,6 +1052,26 @@
 
 	.hud.top {
 		top: 1rem;
+	}
+
+	.hud.side {
+		top: 50%;
+		right: auto;
+		flex-direction: column;
+		gap: 0.6rem;
+		transform: translateY(-50%);
+	}
+
+	.sketch-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		color: var(--text-dim);
+		font-size: 0.9rem;
+	}
+
+	.sketch-row span {
+		flex: 1;
 	}
 
 	.hud.bottom {

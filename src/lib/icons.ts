@@ -34,6 +34,13 @@ import i_studio from '@carbon/icons/es/contrast/20.js';
 import i_fit from '@carbon/icons/es/center--square/20.js';
 import i_person from '@carbon/icons/es/touch--1/20.js';
 import i_undo from '@carbon/icons/es/undo/20.js';
+import i_pen from '@carbon/icons/es/pen/20.js';
+import i_line from '@carbon/icons/es/line--thin/20.js';
+import i_arrow from '@carbon/icons/es/arrow--up-right/20.js';
+import i_rect from '@carbon/icons/es/square--outline/20.js';
+import i_ellipse from '@carbon/icons/es/circle--outline/20.js';
+import i_erase from '@carbon/icons/es/erase/20.js';
+import i_draw from '@carbon/icons/es/draw/20.js';
 
 export interface CarbonNode {
 	elem: string;
@@ -76,7 +83,14 @@ export const icons = {
 	studio: i_studio as CarbonIcon,
 	fit: i_fit as CarbonIcon,
 	person: i_person as CarbonIcon,
-	undo: i_undo as CarbonIcon
+	undo: i_undo as CarbonIcon,
+	pen: i_pen as CarbonIcon,
+	line: i_line as CarbonIcon,
+	arrow: i_arrow as CarbonIcon,
+	rect: i_rect as CarbonIcon,
+	ellipse: i_ellipse as CarbonIcon,
+	erase: i_erase as CarbonIcon,
+	draw: i_draw as CarbonIcon
 } as const;
 
 export type IconName = keyof typeof icons;

@@ -61,7 +61,7 @@ you, with the menu open.
 | Both grips                   | Scale and turn the model; snaps to 1:1, 1:10, 1:20, 1:50, 1:100…          |
 | Trigger                      | Press a menu button or key; point at a note to edit, resolve or delete it |
 
-The **menu** has the scales (_Fit_ chooses the largest that fits on the
+The **menu** has **Draw** (see Sketches), the scales (_Fit_ chooses the largest that fits on the
 table; _1:1_ puts you life-size where the right hand points), previous and
 next view, **Save view**, **Add note**, notes shown or hidden, and **Exit
 VR**.
@@ -87,6 +87,23 @@ effect.
 Hand tracking works for pointing and pinching at the menu and keyboard;
 pinching at empty space opens the menu. Walking, teleporting and scaling
 need the controllers.
+
+## Sketches
+
+Mark up the model as you would a print. On a screen, the rail down the
+left of the view holds the tools — **Pen**, **Line**, **Arrow**,
+**Rectangle**, **Ellipse** and **Eraser** — and six colours. Choose one and
+drag on the model: a mark starts on whatever surface you press, and
+rectangles and ellipses lie flat on it. Choosing the tool again, or Esc,
+puts it down. The eraser takes away the sketch you click.
+
+In the headset, **Draw** on the menu turns the trigger into a pen: hold it
+and move your hand to draw in the air, around or through the model.
+
+Sketches stay where they were drawn as the model is scaled and turned,
+are kept with the model's notes, go out in **Export JSON**, and come back
+in on import. **Clear sketches** in the Notes panel removes them all,
+one step to undo.
 
 ## Background
 

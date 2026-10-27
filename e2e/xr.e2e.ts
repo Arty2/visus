@@ -193,3 +193,42 @@ test('walking is carried up onto the plinth and stopped by the wall', async ({ p
 	expect(eyeZ).toBeGreaterThan(-3.5); // and never through the wall
 	expect(errors).toEqual([]);
 });
+
+/*
+ * Drawing in the air: Draw on the in-headset menu, then the trigger held
+ * while the hand moves. The menu's Draw button is second of four in its
+ * row: 0.061 m left of the panel's centre and 0.084 m below it, which the
+ * 0.3 rad tilt puts at (−0.061, 1.319, −0.575) in front of a head at the
+ * start position.
+ */
+test('Draw on the headset menu turns the trigger into a pen', async ({ page }) => {
+	const errors = collectErrors(page);
+	await enterVR(page);
+	await page.evaluate(`{
+		const right = __xr.controllers.right;
+		right.position.set(-0.061, 1.3194, -0.2);
+		right.quaternion.set(0, 0, 0, 1);
+	}`);
+	await frames(page);
+	await press(page, 'right', 'trigger');
+
+	// Off the menu, then a stroke: trigger down, a sweep, trigger up.
+	await page.evaluate(`{
+		const right = __xr.controllers.right;
+		right.position.set(0.3, 1.1, -0.3);
+		right.quaternion.set(-0.2, 0, 0, 0.98);
+		right.updateButtonValue('trigger', 1);
+	}`);
+	await frames(page);
+	for (let i = 1; i <= 6; i++) {
+		await page.evaluate(
+			`__xr.controllers.right.position.set(${0.3 - i * 0.05}, ${1.1 + i * 0.02}, -0.3)`
+		);
+		await frames(page, 2);
+	}
+	await page.evaluate(`__xr.controllers.right.updateButtonValue('trigger', 0)`);
+	await frames(page);
+
+	await expect(page.locator('.sketch-row span')).toHaveText('1 sketch');
+	expect(errors).toEqual([]);
+});

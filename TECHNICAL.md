@@ -459,6 +459,16 @@ Scaling changes the model's group, never the dolly, so the eye distance
 stays right. Notes and saved views are kept in model coordinates and
 survive any scale.
 
+**Sketches** are stored as the polylines they draw (`store/notes.ts`), in
+model coordinates, lifted a hair off the surface they were drawn on so they
+aren't half-buried in it. They're drawn with three's "fat lines"
+(`LineSegments2`, one per sketch, `sketch-layer.ts`): plain WebGL lines are
+one pixel whatever is asked, which vanishes in a headset, and widths in
+screen pixels read the same at 1:1 and on a miniature. Their resolution is
+the canvas on a screen and one eye's framebuffer in VR. The geometry —
+stroke simplification, shapes on a surface's plane, arrowheads — is
+`sketch.ts`, with tests.
+
 **Text entry** inside an immersive session is the app's own job — there is
 no system keyboard and no DOM overlay in `immersive-vr` — so menus and the
 keyboard are canvases drawn with the 2D API on planes (`panel.ts`).

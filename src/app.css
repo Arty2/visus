@@ -159,7 +159,57 @@ body {
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-/* The background picker: the one part of the canvas HUD that takes clicks. */
+/* The sketch rail down the left of the view: tools, then colours. */
+.rail {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 0.25rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: rgba(9, 12, 16, 0.82);
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	pointer-events: auto;
+}
+
+.tool,
+.swatch {
+	display: grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: none;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.tool:hover,
+.swatch:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.tool[data-state='on'] {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+
+.swatch[data-state='on'] {
+	border-color: var(--text);
+}
+
+.tool:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+canvas.drawing {
+	cursor: crosshair;
+}
+
+/* The background picker: the other part of the canvas HUD that takes clicks. */
 .backdrops {
 	display: inline-flex;
 	align-items: center;

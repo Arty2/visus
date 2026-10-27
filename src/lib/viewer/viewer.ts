@@ -1,5 +1,6 @@
 import {
 	ACESFilmicToneMapping,
+	Plane,
 	Box3,
 	Sphere,
 	Spherical,
@@ -37,6 +38,9 @@ import { autoShift, keyboardRows, pressKey } from './keyboard';
 import { Markers } from './markers';
 import { Panel, type Control } from './panel';
 import { disposeScene } from './dispose';
+import { SketchLayer } from './sketch-layer';
+import { ellipse, planeBasis, rectangle, simplify, toVec3 } from './sketch';
+import type { Sketch, SketchKind } from '$lib/store/notes';
 import type { IconName } from '$lib/icons';
 import {
 	fitScale,
@@ -71,6 +75,23 @@ export interface ViewerHooks {
 	sessionChanged(active: boolean): void;
 	/** The background was changed from the headset's menu. */
 	backdropChanged(backdrop: Backdrop): void;
+	/** A sketch was finished; its points are in model coordinates. */
+	addSketch(kind: SketchKind, colour: string, points: Vec3[], normal?: Vec3): void;
+	removeSketch(id: string): void;
+}
+
+/** What a press on the model does on a screen: draw one kind of mark, or erase. */
+export type SketchTool = SketchKind | 'erase';
+
+/** A stroke or shape being drawn, in world space until it's kept. */
+interface Drawing {
+	kind: SketchKind;
+	/** Where it started, on the surface — and that surface's plane. */
+	origin: Vector3;
+	normal: Vector3;
+	u: Vector3;
+	v: Vector3;
+	points: Vector3[];
 }
 
 // camera-controls takes the three.js classes it needs rather than importing
@@ -162,6 +183,13 @@ export class Viewer {
 	private readonly world = new Group();
 	private readonly controls: CameraControls;
 	private readonly markers = new Markers();
+	private readonly sketchLayer = new SketchLayer();
+	private tool: SketchTool | null = null;
+	private colour = '#fa4d56';
+	private drawing: Drawing | null = null;
+	/** Drawing in the air with the trigger, toggled from the VR menu. */
+	private airDraw = false;
+	private airStroke: { hand: Hand; points: Vector3[] } | null = null;
 	private readonly raycaster = Object.assign(new Raycaster(), {
 		// The nearest hit is all anything here wants, and stopping at the
 		// first per mesh is what makes the BVH's raycast fast.
@@ -232,7 +260,7 @@ export class Viewer {
 		this.camera.position.set(8, 6, 10);
 		this.dolly.add(this.camera);
 		this.scene.add(this.dolly, this.world);
-		this.world.add(this.markers.group);
+		this.world.add(this.markers.group, this.sketchLayer.group);
 
 		// camera-controls rather than three's OrbitControls: eased, animated
 		// moves between views instead of jumps, zoom toward the cursor (the
@@ -271,8 +299,13 @@ export class Viewer {
 
 		canvas.addEventListener('pointerdown', (e) => {
 			this.pointerDown = { x: e.clientX, y: e.clientY };
+			if (this.tool && e.button === 0 && !this.presenting) this.startDrawing(e);
 		});
-		canvas.addEventListener('pointerup', (e) => this.desktopClick(e));
+		canvas.addEventListener('pointermove', (e) => this.continueDrawing(e));
+		canvas.addEventListener('pointerup', (e) => {
+			if (this.tool) this.finishDrawing();
+			else this.desktopClick(e);
+		});
 
 		this.resizeObserver = new ResizeObserver(() => this.resize());
 		this.resizeObserver.observe(container);
@@ -396,6 +429,23 @@ export class Viewer {
 		this.viewIndex = current ? views.findIndex((v) => v.id === current) : -1;
 	}
 
+	setSketches(sketches: Sketch[]) {
+		this.sketchLayer.sync(sketches);
+	}
+
+	/**
+	 * On a screen, a press on the model draws with `tool` (or erases), and
+	 * orbiting waits until the tool is put down. `colour` is used in the
+	 * headset too.
+	 */
+	setTool(tool: SketchTool | null, colour: string) {
+		this.tool = tool;
+		this.colour = colour;
+		this.controls.enabled = !tool && !this.presenting;
+		this.renderer.domElement.classList.toggle('drawing', !!tool);
+		if (!tool) this.cancelDrawing();
+	}
+
 	setNotes(notes: Annotation[]) {
 		this.markers.sync(notes);
 		// A note deleted from the page while it's open on the keyboard.
@@ -489,6 +539,8 @@ export class Viewer {
 		const { clientWidth: w, clientHeight: h } = this.container;
 		if (!w || !h) return;
 		this.renderer.setSize(w, h, false);
+		const ratio = this.renderer.getPixelRatio();
+		this.sketchLayer.setResolution(w * ratio, h * ratio);
 		this.camera.aspect = w / h;
 		this.camera.updateProjectionMatrix();
 	}
@@ -513,6 +565,157 @@ export class Viewer {
 			const id = this.hooks.addNote(this.toModel(hit.point));
 			this.hooks.noteSelected(id);
 		}
+	}
+
+	// ── Sketching on a screen ──────────────────────────────────────────────
+
+	private rayFrom(e: PointerEvent) {
+		const rect = this.renderer.domElement.getBoundingClientRect();
+		this.raycaster.setFromCamera(
+			new Vector2(
+				((e.clientX - rect.left) / rect.width) * 2 - 1,
+				-((e.clientY - rect.top) / rect.height) * 2 + 1
+			),
+			this.camera
+		);
+	}
+
+	/**
+	 * A mark starts on the model, and the surface it starts on is its plane:
+	 * a rectangle drawn on a wall stays flat on that wall however the pointer
+	 * strays off it. A freehand stroke follows the surface wherever it can.
+	 */
+	private startDrawing(e: PointerEvent) {
+		this.rayFrom(e);
+		if (this.tool === 'erase') {
+			const id = this.sketchLayer.pick(this.raycaster);
+			if (id) this.hooks.removeSketch(id);
+			return;
+		}
+		const [hit] = this.raycaster.intersectObjects(this.targets, false);
+		if (!hit || !this.tool) return;
+		const { normal } = modelHit(hit, this.raycaster.ray.direction);
+		const right = new Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+		const { u, v } = planeBasis(normal, right);
+		this.drawing = {
+			kind: this.tool,
+			origin: hit.point.clone(),
+			normal,
+			u,
+			v,
+			points: [hit.point.clone()]
+		};
+		this.renderer.domElement.setPointerCapture(e.pointerId);
+	}
+
+	private continueDrawing(e: PointerEvent) {
+		const d = this.drawing;
+		if (!d) return;
+		this.rayFrom(e);
+		let at: Vector3 | null = null;
+		if (d.kind === 'pen') {
+			const [hit] = this.raycaster.intersectObjects(this.targets, false);
+			at = hit?.point.clone() ?? null;
+		}
+		at ??= this.raycaster.ray.intersectPlane(
+			new Plane().setFromNormalAndCoplanarPoint(d.normal, d.origin),
+			new Vector3()
+		);
+		if (!at) return;
+		if (d.kind === 'pen') {
+			// A point every few pixels' worth, not one per mouse event.
+			const step = this.camera.position.distanceTo(at) * 0.003;
+			if (at.distanceTo(d.points[d.points.length - 1]) > step) d.points.push(at);
+		} else {
+			d.points = this.shape(d, at);
+		}
+		this.sketchLayer.showPreview({
+			kind: d.kind,
+			colour: this.colour,
+			points: this.lifted(d).map((p) => this.toModel(p)),
+			normal: toVec3(d.normal)
+		});
+	}
+
+	private shape(d: Drawing, to: Vector3): Vector3[] {
+		if (d.kind === 'rect') return rectangle(d.origin, to, d.u, d.v);
+		if (d.kind === 'ellipse') return ellipse(d.origin, to, d.u, d.v);
+		return [d.origin.clone(), to];
+	}
+
+	/**
+	 * Lifted off the surface by a little more than nothing, so the line
+	 * isn't half-buried in the face it was drawn on.
+	 */
+	private lifted(d: Drawing): Vector3[] {
+		const lift = this.camera.position.distanceTo(d.origin) * 0.004;
+		return d.points.map((p) => p.clone().addScaledVector(d.normal, lift));
+	}
+
+	private finishDrawing() {
+		const d = this.drawing;
+		this.drawing = null;
+		this.sketchLayer.showPreview(null);
+		if (!d || d.points.length < 2) return;
+		const scale = this.camera.position.distanceTo(d.origin);
+		const points = d.kind === 'pen' ? simplify(this.lifted(d), scale * 0.0015) : this.lifted(d);
+		// A press with hardly any movement was a click, not a mark.
+		let length = 0;
+		for (let i = 1; i < points.length; i++) length += points[i].distanceTo(points[i - 1]);
+		if (length < scale * 0.01) return;
+		this.keepSketch(d.kind, points, d.normal);
+	}
+
+	private cancelDrawing() {
+		this.drawing = null;
+		this.airStroke = null;
+		this.sketchLayer.showPreview(null);
+	}
+
+	/** World points and normal into model coordinates, and over to the page. */
+	private keepSketch(kind: SketchKind, points: Vector3[], normal?: Vector3) {
+		const inverse = this.world.quaternion.clone().invert();
+		this.hooks.addSketch(
+			kind,
+			this.colour,
+			points.map((p) => this.toModel(p)),
+			normal ? toVec3(normal.clone().applyQuaternion(inverse)) : undefined
+		);
+	}
+
+	// ── Sketching in the air ───────────────────────────────────────────────
+
+	/** Just ahead of the controller, where a pen's tip would be. */
+	private penTip(hand: Hand): Vector3 {
+		const origin = hand.ray.getWorldPosition(new Vector3());
+		const direction = new Vector3(0, 0, -1).applyQuaternion(
+			hand.ray.getWorldQuaternion(new Quaternion())
+		);
+		return origin.addScaledVector(direction, 0.05);
+	}
+
+	private continueAirStroke() {
+		const stroke = this.airStroke;
+		if (!stroke) return;
+		const tip = this.penTip(stroke.hand);
+		// Room space: 5 mm between points, whatever the model's scale.
+		if (tip.distanceTo(stroke.points[stroke.points.length - 1]) > 0.005) stroke.points.push(tip);
+		this.sketchLayer.showPreview({
+			kind: 'pen',
+			colour: this.colour,
+			points: stroke.points.map((p) => this.toModel(p))
+		});
+	}
+
+	private finishAirStroke(hand: Hand) {
+		const stroke = this.airStroke;
+		if (!stroke || stroke.hand !== hand) return;
+		this.airStroke = null;
+		this.sketchLayer.showPreview(null);
+		const points = simplify(stroke.points, 0.002);
+		if (points.length < 2) return;
+		this.keepSketch('pen', points);
+		this.buzz(hand, 0.2, 15);
 	}
 
 	/** Arrows orbit, shift-arrows pan, + and − zoom: the canvas is focusable. */
@@ -559,6 +762,8 @@ export class Viewer {
 	}
 
 	private sessionEnded() {
+		this.cancelDrawing();
+		this.airDraw = false;
 		// Taking the headset off mid-note keeps what was typed; a note placed
 		// and never written in goes, as Cancel would have done.
 		const e = this.editing;
@@ -590,6 +795,10 @@ export class Viewer {
 		// there's nothing to place the model in front of.
 		if (this.pendingPlacement && this.camera.position.y !== 0) {
 			this.pendingPlacement = false;
+			// Fat lines are sized in pixels of what they're drawn to: one eye.
+			const layer = this.renderer.xr.getBaseLayer() as XRWebGLLayer | null;
+			if (layer)
+				this.sketchLayer.setResolution(layer.framebufferWidth / 2, layer.framebufferHeight);
 			this.overview();
 			this.openMenu();
 		}
@@ -635,6 +844,7 @@ export class Viewer {
 			if (this.edge(left, LOWER)) this.addNoteAtPointer(right ?? left);
 			if (this.edge(left, UPPER)) this.toggleMenu();
 		}
+		this.continueAirStroke();
 		for (const hand of this.hands) this.remember(hand);
 	}
 
@@ -668,6 +878,7 @@ export class Viewer {
 		});
 		// Trigger on a controller, pinch on a tracked hand: both arrive as select.
 		ray.addEventListener('selectstart', () => this.select(hand));
+		ray.addEventListener('selectend', () => this.finishAirStroke(hand));
 		return hand;
 	}
 
@@ -731,6 +942,12 @@ export class Viewer {
 		if (hit?.kind === 'model' && this.armedNote) {
 			this.armedNote = false;
 			this.placeNote(hit.point);
+			return;
+		}
+		// Drawing mode: the trigger is a pen, held down for as long as the
+		// stroke lasts — through the air, or along the model.
+		if (this.airDraw) {
+			this.airStroke = { hand, points: [this.penTip(hand)] };
 			return;
 		}
 		// A tracked hand has no Y button; pinching at nothing opens the menu.
@@ -1160,13 +1377,14 @@ export class Viewer {
 				...row(516, [
 					{
 						id: 'add-note',
-						label: this.armedNote ? 'Placing…' : 'Add note',
+						label: this.armedNote ? 'Placing…' : 'Note',
 						icon: 'pin',
 						active: this.armedNote
 					},
+					{ id: 'draw', label: 'Draw', icon: 'draw', active: this.airDraw },
 					{
 						id: 'notes',
-						label: shown ? 'Hide notes' : 'Show notes',
+						label: shown ? 'Hide' : 'Show',
 						icon: shown ? 'viewOff' : 'view'
 					},
 					{
@@ -1230,8 +1448,20 @@ export class Viewer {
 		else if (id === 'add-note') {
 			this.armedNote = !this.armedNote;
 			if (this.armedNote) this.say('Point at the model and pull the trigger');
-		} else if (id === 'notes') this.markers.group.visible = !this.markers.group.visible;
-		else if (id === 'backdrop') {
+		} else if (id === 'draw') {
+			this.airDraw = !this.airDraw;
+			this.armedNote = false;
+			// Out of the way: the menu draws over everything, and a stroke
+			// aimed through it would press its buttons instead.
+			if (this.airDraw) {
+				this.menu.mesh.visible = false;
+				this.say('Hold the trigger to draw · Y for the menu');
+			}
+		} else if (id === 'notes') {
+			// Notes and sketches are both marks on the model: one switch.
+			this.markers.group.visible = !this.markers.group.visible;
+			this.sketchLayer.group.visible = this.markers.group.visible;
+		} else if (id === 'backdrop') {
 			this.setBackdrop(nextBackdrop(this.backdrop));
 			this.hooks.backdropChanged(this.backdrop);
 		} else if (id === 'close') this.menu.mesh.visible = false;
