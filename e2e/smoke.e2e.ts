@@ -95,6 +95,33 @@ test('notes export as JSON and Markdown, and each round-trips through import', a
 	}
 });
 
+// A hand-edited file can repeat an id; the lists are keyed by id, and a
+// repeat once stopped the page drawing them at all — and was saved, so it
+// stayed broken across reloads.
+test('importing notes that share an id shows all of them', async ({ page }) => {
+	await ready(page);
+	const note = (text: string) => ({ id: 'same', text, done: false, position: [0, 0.5, 0] });
+	await page.getByLabel('Import notes').setInputFiles({
+		name: 'repeated.json',
+		mimeType: 'application/json',
+		buffer: Buffer.from(
+			JSON.stringify({ version: 1, annotations: [note('first'), note('second')], viewpoints: [] })
+		)
+	});
+	await expect(page.locator('.note-text')).toHaveCount(2);
+	await page.reload();
+	await expect(page.locator('.note-text')).toHaveCount(2);
+});
+
+test('the current view stays marked when a view above it is deleted', async ({ page }) => {
+	await ready(page);
+	await page.getByRole('button', { name: 'Save this view' }).click();
+	await page.getByRole('button', { name: 'Save this view' }).click();
+	await page.getByRole('button', { name: 'View 2', exact: true }).click();
+	await page.getByRole('button', { name: 'Delete View 1' }).click();
+	await expect(page.locator('[aria-current="true"]')).toHaveText('View 2');
+});
+
 test('importing a malformed file shows an error and keeps the notes', async ({ page }) => {
 	await ready(page);
 	await placeNote(page, 'keep me');

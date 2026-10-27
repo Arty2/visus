@@ -1,4 +1,10 @@
-import { isAnnotation, isViewpoint, SCHEMA_VERSION, type ModelNotes } from '$lib/store/notes';
+import {
+	isAnnotation,
+	isViewpoint,
+	SCHEMA_VERSION,
+	uniqueIds,
+	type ModelNotes
+} from '$lib/store/notes';
 
 // The export is also a valid Persisted (see store/notes.ts): a downloaded
 // file and a localStorage record are one shape, so there's one thing to keep
@@ -32,5 +38,5 @@ export function fromJSON(text: string): ModelNotes {
 		throw new Error('That JSON is not a recognised set of notes.');
 	}
 
-	return { annotations, viewpoints };
+	return { annotations: uniqueIds(annotations), viewpoints: uniqueIds(viewpoints) };
 }

@@ -25,7 +25,8 @@
 	let xrError = $state('');
 	let inVR = $state(false);
 	let addMode = $state(false);
-	let currentView = $state(-1);
+	// By id, not index: deleting a saved view shifts the ones after it.
+	let currentViewId: string | null = $state(null);
 	let importError = $state('');
 	/** The saved view whose name is being edited in place, if any. */
 	let renaming: string | null = $state(null);
@@ -42,6 +43,7 @@
 		...notesStore.viewpoints.map((v) => ({ ...v, pitch: 0, saved: true }))
 	]);
 	const noNotes = $derived(notesStore.annotations.length === 0);
+	const currentView = $derived(views.findIndex((v) => v.id === currentViewId));
 
 	// The viewer is told, never asked: these keep it in step with the store.
 	$effect(() => {
@@ -73,7 +75,7 @@
 				deleteNote: (id) => notesStore.removeAnnotation(id),
 				discardIfEmpty: (id) => notesStore.discardIfEmpty(id),
 				saveView: (position, yaw) => notesStore.addViewpoint(position, yaw),
-				viewChanged: (index) => (currentView = index),
+				viewChanged: (index) => (currentViewId = views[index]?.id ?? null),
 				noteSelected: (id) => void focusNote(id),
 				sessionChanged: (active) => (inVR = active)
 			});
@@ -115,7 +117,7 @@
 		fileViews = cameras;
 		modelName = name;
 		missing = missingFiles;
-		currentView = -1;
+		currentViewId = null;
 		addMode = false;
 		notesStore.open(key);
 	}
@@ -235,13 +237,16 @@
 			     among them, match it by MIME type, and .glb and .dae have none they
 			     recognise — the files show greyed out and can't be picked. What
 			     was picked is checked after (src/lib/viewer/files.ts). -->
-			<label class="btn">
+			<!-- Disabled until the viewer is up: a model opened sooner had nowhere
+			     to go, and the sample loading next silently replaced it. -->
+			<label class="btn" class:disabled={!viewer}>
 				<Icon name="open" />
 				<span>Open model…</span>
 				<input
 					bind:this={modelInput}
 					type="file"
 					multiple
+					disabled={!viewer}
 					onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
 				/>
 			</label>
@@ -669,7 +674,8 @@
 		border-color: #6ff0d6;
 	}
 
-	.btn:disabled {
+	.btn:disabled,
+	.btn.disabled {
 		opacity: 0.4;
 		cursor: default;
 		box-shadow: none;

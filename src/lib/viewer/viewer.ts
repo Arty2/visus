@@ -288,8 +288,11 @@ export class Viewer {
 	}
 
 	setViews(views: ViewTarget[]) {
+		// Followed by id, not position: deleting a saved view above the
+		// current one shifts every index after it.
+		const current = this.views[this.viewIndex]?.id;
 		this.views = views;
-		if (this.viewIndex >= views.length) this.viewIndex = -1;
+		this.viewIndex = current ? views.findIndex((v) => v.id === current) : -1;
 	}
 
 	setNotes(notes: Annotation[]) {
@@ -424,6 +427,11 @@ export class Viewer {
 	}
 
 	private sessionEnded() {
+		// Taking the headset off mid-note keeps what was typed; a note placed
+		// and never written in goes, as Cancel would have done.
+		const e = this.editing;
+		if (e?.text.trim()) this.hooks.setNoteText(e.id, e.text.trim());
+		else if (e?.isNew) this.hooks.discardIfEmpty(e.id);
 		this.closeEditor();
 		this.menu.mesh.visible = false;
 		this.arc.visible = false;

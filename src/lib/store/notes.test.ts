@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { migrate, modelKey, newAnnotation, newViewpoint, SCHEMA_VERSION } from './notes';
+import { migrate, modelKey, newAnnotation, newViewpoint, SCHEMA_VERSION, uniqueIds } from './notes';
 
 describe('migrate', () => {
 	it('keeps valid notes and viewpoints, and drops what it does not recognise', () => {
@@ -19,6 +19,22 @@ describe('migrate', () => {
 		expect(migrate('text')).toEqual(empty);
 		expect(migrate({ version: 999, annotations: [] })).toEqual(empty);
 		expect(migrate({ version: SCHEMA_VERSION })).toEqual(empty);
+	});
+});
+
+describe('uniqueIds', () => {
+	it('keeps the first of a repeated id and gives the rest fresh ones', () => {
+		const a = newAnnotation('first', [0, 0, 0]);
+		const out = uniqueIds([a, { ...a, text: 'second' }, { ...a, text: 'third' }]);
+		expect(out[0]).toBe(a);
+		expect(out.map((n) => n.text)).toEqual(['first', 'second', 'third']);
+		expect(new Set(out.map((n) => n.id)).size).toBe(3);
+	});
+
+	it('is applied by migrate, so a bad record can never break the list', () => {
+		const a = newAnnotation('x', [0, 0, 0]);
+		const notes = migrate({ version: SCHEMA_VERSION, annotations: [a, a], viewpoints: [] });
+		expect(new Set(notes.annotations.map((n) => n.id)).size).toBe(2);
 	});
 });
 

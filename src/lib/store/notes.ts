@@ -83,16 +83,34 @@ export function migrate(raw: unknown): ModelNotes {
 
 	if (persisted.version === SCHEMA_VERSION) {
 		return {
-			annotations: Array.isArray(persisted.annotations)
-				? persisted.annotations.filter(isAnnotation)
-				: [],
-			viewpoints: Array.isArray(persisted.viewpoints)
-				? persisted.viewpoints.filter(isViewpoint)
-				: []
+			annotations: uniqueIds(
+				Array.isArray(persisted.annotations) ? persisted.annotations.filter(isAnnotation) : []
+			),
+			viewpoints: uniqueIds(
+				Array.isArray(persisted.viewpoints) ? persisted.viewpoints.filter(isViewpoint) : []
+			)
 		};
 	}
 
 	return emptyNotes();
+}
+
+/**
+ * Every id once. A hand-edited or merged file can repeat one, and the lists
+ * are keyed by id — a repeat doesn't just confuse, it stops the page drawing
+ * the list at all. The first keeps its id; later ones get fresh ones.
+ */
+export function uniqueIds<T extends { id: string }>(items: T[]): T[] {
+	const seen = new Set<string>();
+	return items.map((item) => {
+		if (!seen.has(item.id)) {
+			seen.add(item.id);
+			return item;
+		}
+		const id = crypto.randomUUID();
+		seen.add(id);
+		return { ...item, id };
+	});
 }
 
 export function isVec3(value: unknown): value is Vec3 {

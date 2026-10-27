@@ -13,6 +13,11 @@ export default defineConfig({
 	testDir: 'e2e',
 	testMatch: '**/*.e2e.{ts,js}',
 	fullyParallel: true,
+	// A minute, not the default thirty seconds: every test starts a WebGL
+	// viewer on a software renderer, and the headset tests then drive an
+	// emulated session frame by frame. Under a full parallel run, opening
+	// the viewer alone can take most of thirty seconds.
+	timeout: 60_000,
 	workers: process.env.CI ? 4 : '50%',
 	// One retry on CI. Not a licence for flaky tests — cover for real timing
 	// edges; a retry that passes still shows up in the report as flaky.
