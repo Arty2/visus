@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { notesStore } from '$lib/store/notes.svelte';
+	import { notesStore, type Incoming } from '$lib/store/notes.svelte';
 	import { downloadText } from '$lib/io/download';
 	import { fromJSON, toJSON } from '$lib/io/json';
 	import { fromMarkdown, toMarkdown } from '$lib/io/markdown';
-	import type { ModelNotes } from '$lib/store/notes';
 	import type { Viewer } from '$lib/viewer/viewer';
 	import type { ViewTarget } from '$lib/viewer/views';
 	import WhatsNew from '$lib/WhatsNew.svelte';
@@ -68,6 +67,16 @@
 	// Escape leaves note-placing mode — the way out a crosshair cursor implies.
 	function onKey(event: KeyboardEvent) {
 		if (event.key === 'Escape' && addMode) addMode = false;
+		// Ctrl/Cmd+Z steps back through every change to the notes, views and
+		// sketches; with Shift (or Ctrl+Y), forward again. Not while typing:
+		// a text field's own undo is the one meant there.
+		const typing = (event.target as HTMLElement | null)?.closest('input, textarea');
+		if (typing || !(event.ctrlKey || event.metaKey)) return;
+		const key = event.key.toLowerCase();
+		if (key === 'z' && !event.shiftKey) notesStore.undo();
+		else if ((key === 'z' && event.shiftKey) || key === 'y') notesStore.redo();
+		else return;
+		event.preventDefault();
 	}
 
 	const views: ViewTarget[] = $derived([
@@ -232,7 +241,7 @@
 		downloadText(
 			`${fileStem}.notes.json`,
 			'application/json',
-			toJSON(notesStore.snapshot(), modelName)
+			toJSON(notesStore.snapshot(), modelName, notesStore.encoded())
 		);
 	}
 
@@ -251,16 +260,17 @@
 		try {
 			const text = await file.text();
 			const looksLikeJSON = file.name.endsWith('.json') || text.trimStart().startsWith('{');
-			const notes: ModelNotes = looksLikeJSON
+			const incoming: Incoming = looksLikeJSON
 				? fromJSON(text)
-				: { annotations: fromMarkdown(text), viewpoints: [] };
-			const count = notes.annotations.length + notes.viewpoints.length;
-			// One refusal for both formats: an import with nothing in it is
-			// almost always the wrong file, and applying it would wipe the notes.
-			if (count === 0) throw new Error('That file contains no notes.');
-			// Markdown can't carry viewpoints, so it leaves the saved ones alone.
-			if (!looksLikeJSON) notes.viewpoints = notesStore.snapshot().viewpoints;
-			notesStore.replace(notes, `Imported ${count} from “${file.name}”.`);
+				: { notes: { annotations: fromMarkdown(text), viewpoints: [], sketches: [] } };
+			const { annotations, viewpoints, sketches } = incoming.notes;
+			// One refusal for every format: a file with nothing in it is almost
+			// always the wrong file — a README reads as no notes at all.
+			if (annotations.length + viewpoints.length + sketches.length === 0) {
+				throw new Error('That file contains no notes.');
+			}
+			// Merged, never replaced: see notesStore.merge().
+			notesStore.merge(incoming, file.name);
 		} catch (err) {
 			importError = err instanceof Error ? err.message : 'Could not read that file.';
 		} finally {

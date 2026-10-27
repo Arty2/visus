@@ -113,8 +113,10 @@ browser and found again whenever the same file is reopened. A file
 re-exported with changes is a new file, with notes of its own — export the
 old ones and import them if they still apply.
 
-A note can be **resolved** (ticked) rather than deleted. Deleting one, or
-importing over them, can be undone once.
+A note can be **resolved** (ticked) rather than deleted. **Ctrl+Z** (⌘Z on
+a Mac) steps back through every change to notes, views and sketches, and
+**Shift+Ctrl+Z** forward again; deleting something also offers **Undo**
+right where it happened.
 
 **Export Markdown** writes the notes as a checklist anyone can read, each
 with where it is pinned in metres:
@@ -126,8 +128,15 @@ with where it is pinned in metres:
 - [x] Door swings into the corridor @ -1.200, 0.000, 6.800
 ```
 
-**Export JSON** writes the notes and the saved views. Either imports back
-into whichever model is open; an import with nothing in it is refused.
+**Export JSON** writes everything — notes, saved views, sketches — and
+the history that lets two copies be merged.
+
+**Importing merges.** Nothing you have is deleted or replaced: everything
+in the file is added to what's here, so a colleague's review and yours end
+up as one, and importing your own backup brings back anything deleted
+since. Where you both edited the same note, the later edit wins. A Markdown
+file adds its notes, skipping any identical to one already here. An import
+with nothing in it is refused, and any import can be undone.
 
 ## What leaves this machine
 

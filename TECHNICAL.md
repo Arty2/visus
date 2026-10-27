@@ -376,6 +376,7 @@ one, and what it replaced:
 | `@carbon/icons`                                                   | IBM Carbon's icons, on the page (`Icon.svelte`) and drawn into the headset's panels (`panel.ts`) | Hand-drawn SVG paths                                                |
 | `@fontsource/ibm-plex-mono`, `@fontsource-variable/ibm-plex-sans` | IBM Plex, served from this origin                                                                | The system font                                                     |
 | `bits-ui`                                                         | Headless, accessible dialogs, tooltips, a toggle group and a switch, styled by `app.css`         | Native `<dialog>`, `title` attributes, a hand-drawn checkbox switch |
+| `yjs`                                                             | A model's notes, views and sketches as a CRDT: merging imports, multi-step undo                  | Plain lists in localStorage; one snapshot of undo                   |
 
 **glTF-Transform without its pixel tools.** Its functions package imports
 `ndarray-pixels` and `ndarray-lanczos` for texture work, and `ndarray-ops`
@@ -407,6 +408,33 @@ draw nothing. `e2e/smoke.e2e.ts` checks every path on the page is SVG.
 One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
 to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two
 copies means two sets of classes that fail each other's `instanceof`.
+
+## Notes as a CRDT
+
+From schema version 2, a model's notes, saved views and sketches live in
+a Yjs document (`src/lib/store/doc.ts`): three maps keyed by id, each
+value the plain item, replaced whole on an edit. localStorage holds the
+document as one base64 update; JSON exports carry it next to the readable
+lists. What that buys:
+
+- **Import merges.** Two people's exports of the same model combine, edits
+  to different notes never conflict, and the later edit to the same note
+  wins. On top of the CRDT merge, anything the file lists that's missing
+  here is added, so importing your own backup restores what was deleted
+  since — as a pure CRDT, the newer deletion would silently win. Lists
+  without Yjs state (Markdown, version 1 files) are added by id, and a
+  Markdown note identical in text and place to one here is skipped.
+- **Undo is a history**, a `Y.UndoManager` over the three maps with each
+  change its own step (`captureTimeout: 0`). osseus's pattern keeps one
+  snapshot; the deletion notice still offers exactly that one step, and
+  Ctrl+Z walks further.
+
+`notes.ts` still owns validity: every item read out of a document passes
+its Valibot schema, and `migrate()` turns version 1 lists (and anything
+else) into version 2, numbering items' `created` in their stored order so
+the list keeps its order. Lists are drawn sorted by `created`, then id,
+because merged items have no place in anyone else's list.
+`e2e/storage.e2e.ts` loads version 1 data saved before the change.
 
 ## The viewer
 

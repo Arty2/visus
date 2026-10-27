@@ -32,14 +32,14 @@ runs. `pnpm feedback "..."` appends a stub to TEMPLATE_FEEDBACK.md.
   `src/lib/changelog.ts` + `src/lib/WhatsNew.svelte` parse and show
   `CHANGELOG.md` (bundled with `?raw`).
 - **Local-first data** — `src/lib/store/notes.ts` is the plain module
-  (`Annotation`, `Viewpoint`, `SCHEMA_VERSION`, `migrate()`), positions in
-  model coordinates; `src/lib/store/notes.svelte.ts` the thin class, one
-  localStorage key per model (`modelKey`): `$state` holds the open model's
-  notes, every mutating method calls one `persist()`, guarded by `browser`
-  because the page is prerendered. `storageBroken` reports a failed write;
-  `undoable`/`undo()` is a `$state.snapshot`. `src/lib/io/json.ts` and
-  `markdown.ts` are the adapters, `src/routes/+page.svelte` the call site that
-  refuses an empty import, `src/lib/io/download.ts` hands the browser a file.
+  (Valibot schemas, `SCHEMA_VERSION`, `migrate()`), positions in model
+  coordinates; `doc.ts` holds them in a Yjs document (merge, encode);
+  `notes.svelte.ts` the thin class, one localStorage key per model: it reads
+  `$state` lists out of the document after every change and persists it,
+  guarded by `browser`. `storageBroken` reports a failed write; undo is a
+  `Y.UndoManager`; import merges (TECHNICAL.md § Notes as a CRDT). `io/json.ts`
+  and `markdown.ts` are the adapters, `+page.svelte` the call site refusing an
+  empty import, `io/download.ts` hands the browser a file.
 - **Viewer** — `src/lib/viewer/`: three.js, imported after first paint.
   `viewer.ts` is the scene, desktop orbit and every VR control; `rig.ts`,
   `views.ts`, `files.ts`, `keyboard.ts` are the pure parts with tests;

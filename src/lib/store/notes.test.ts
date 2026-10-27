@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { migrate, modelKey, newAnnotation, newViewpoint, SCHEMA_VERSION, uniqueIds } from './notes';
+import {
+	emptyNotes,
+	migrate,
+	modelKey,
+	newAnnotation,
+	newSketch,
+	newViewpoint,
+	SCHEMA_VERSION,
+	uniqueIds
+} from './notes';
 
 describe('migrate', () => {
 	it('keeps valid notes and viewpoints, and drops what it does not recognise', () => {
@@ -10,15 +19,56 @@ describe('migrate', () => {
 			annotations: [good, { id: 'x', text: 'no position', done: false }],
 			viewpoints: [view, { id: 'y', name: 'bad', position: [0, 'a', 0], yaw: 0 }]
 		});
-		expect(notes).toEqual({ annotations: [good], viewpoints: [view] });
+		expect(notes).toEqual({ annotations: [good], viewpoints: [view], sketches: [] });
 	});
 
 	it('turns anything else into an empty set rather than throwing', () => {
-		const empty = { annotations: [], viewpoints: [] };
+		const empty = emptyNotes();
 		expect(migrate(null)).toEqual(empty);
 		expect(migrate('text')).toEqual(empty);
 		expect(migrate({ version: 999, annotations: [] })).toEqual(empty);
 		expect(migrate({ version: SCHEMA_VERSION })).toEqual(empty);
+	});
+});
+
+describe('migrate from version 1', () => {
+	it('keeps the stored order by numbering what had no creation time', () => {
+		const notes = migrate({
+			version: 1,
+			annotations: [
+				{ id: 'z', text: 'first', done: false, position: [0, 0, 0] },
+				{ id: 'a', text: 'second', done: false, position: [0, 0, 0] }
+			]
+		});
+		expect(notes.annotations.map((a) => [a.text, a.created])).toEqual([
+			['first', 0],
+			['second', 1]
+		]);
+		expect(notes.sketches).toEqual([]);
+	});
+});
+
+describe('sketches', () => {
+	it('keep a valid sketch and refuse a malformed one', () => {
+		const good = newSketch(
+			'arrow',
+			'#fa4d56',
+			[
+				[0, 0, 0],
+				[1, 0, 0]
+			],
+			[0, 1, 0]
+		);
+		const notes = migrate({
+			version: SCHEMA_VERSION,
+			sketches: [
+				good,
+				{ ...good, id: 'one-point', points: [[0, 0, 0]] },
+				{ ...good, id: 'bad-colour', colour: 'red' },
+				{ ...good, id: 'bad-kind', kind: 'spiral' }
+			]
+		});
+		expect(notes.sketches).toEqual([good]);
 	});
 });
 

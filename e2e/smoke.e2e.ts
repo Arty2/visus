@@ -175,7 +175,7 @@ test('importing prose with no notes in it is refused, not applied', async ({ pag
 	await expect(page.locator('.note-text')).toHaveValue('keep me too');
 });
 
-test('an import is undoable, because it replaces every note', async ({ page }) => {
+test('an import merges with the notes already here, and is undoable', async ({ page }) => {
 	await ready(page);
 	await placeNote(page, 'the original');
 	await page.getByLabel('Import notes').setInputFiles({
@@ -183,10 +183,61 @@ test('an import is undoable, because it replaces every note', async ({ page }) =
 		mimeType: 'text/markdown',
 		buffer: Buffer.from('- [ ] something else entirely @ 0, 0.5, 0\n')
 	});
-	await expect(page.locator('.note-text')).toHaveValue('something else entirely');
-	await expect(page.getByRole('status')).toContainText('Imported 1');
+	await expect(page.locator('.note-text')).toHaveCount(2);
+	await expect(page.locator('.note-text').nth(1)).toHaveValue('something else entirely');
+	await expect(page.getByRole('status')).toContainText('Merged in “other.md”');
+
 	await page.getByRole('button', { name: 'Undo' }).click();
+	await expect(page.locator('.note-text')).toHaveCount(1);
 	await expect(page.locator('.note-text')).toHaveValue('the original');
+});
+
+// Two people, two browsers: what one exports, the other merges in, and
+// neither loses anything.
+test('a colleague’s export merges with your own notes', async ({ browser }) => {
+	const theirs = await browser.newPage();
+	await ready(theirs);
+	await placeNote(theirs, 'from them');
+	const [download] = await Promise.all([
+		theirs.waitForEvent('download'),
+		theirs.getByRole('button', { name: 'Export JSON' }).click()
+	]);
+	const file = (await download.path())!;
+
+	const mine = await browser.newPage();
+	await ready(mine);
+	await placeNote(mine, 'from me');
+	await mine.getByLabel('Import notes').setInputFiles(file);
+	await expect(mine.locator('.note-text')).toHaveCount(2);
+	const texts = await mine
+		.locator('.note-text')
+		.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value).sort());
+	expect(texts).toEqual(['from me', 'from them']);
+});
+
+test('re-importing a Markdown export does not double the notes', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'only once');
+	const [download] = await Promise.all([
+		page.waitForEvent('download'),
+		page.getByRole('button', { name: 'Export Markdown' }).click()
+	]);
+	await page.getByLabel('Import notes').setInputFiles((await download.path())!);
+	await expect(page.getByRole('status')).toContainText('Merged in');
+	await expect(page.locator('.note-text')).toHaveCount(1);
+});
+
+test('Ctrl+Z steps back through changes, and Shift+Ctrl+Z forward', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'first');
+	await page.getByRole('button', { name: 'Save this view' }).click();
+	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
+
+	await page.locator('body').click({ position: { x: 5, y: 5 } }); // out of the text field
+	await page.keyboard.press('Control+z');
+	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toHaveCount(0);
+	await page.keyboard.press('Control+Shift+z');
+	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
 });
 
 test('the version opens what changed in it', async ({ page }) => {
@@ -204,6 +255,9 @@ test('the version opens what changed in it', async ({ page }) => {
 });
 
 test('what changed opens by itself after an update, and only once', async ({ page }) => {
+	// Three full page loads, each starting the viewer on a software renderer:
+	// under a full parallel run that alone can pass the usual minute.
+	test.setTimeout(120_000);
 	await ready(page);
 	await expect(page.getByRole('dialog')).toBeHidden();
 

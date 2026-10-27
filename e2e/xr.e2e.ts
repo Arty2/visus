@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createRequire } from 'node:module';
 import { collectErrors, ready } from './helpers';
+import { loadDoc, readNotes } from '../src/lib/store/doc';
 
 /*
  * The headset half, driven through Meta's Immersive Web Emulation Runtime
@@ -182,9 +183,10 @@ test('walking is carried up onto the plinth and stopped by the wall', async ({ p
 	await press(page, 'right', 'trigger');
 	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
 
-	const [eyeX, eyeY, eyeZ] = await page.evaluate(
-		() => JSON.parse(localStorage.getItem('visus:notes:sample')!).viewpoints[0].position
-	);
+	// Read back from storage through the app's own decoder: notes are a Yjs
+	// document there (src/lib/store/doc.ts), plain TypeScript the test can run.
+	const stored = await page.evaluate(() => localStorage.getItem('visus:notes:sample'));
+	const [eyeX, eyeY, eyeZ] = readNotes(loadDoc(JSON.parse(stored!))).viewpoints[0].position;
 	expect(Math.abs(eyeX)).toBeLessThan(0.5); // straight back, not slid sideways
 	expect(eyeY - 1.6).toBeGreaterThan(0.4); // standing on the plinth or the bench
 	expect(eyeZ).toBeLessThan(-2.7); // it did move back from the camera at −2.6

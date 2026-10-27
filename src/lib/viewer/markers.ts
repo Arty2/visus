@@ -37,7 +37,7 @@ export class Markers {
 	private readonly markers = new Map<string, Marker>();
 	private readonly scratch = new Vector3();
 
-	sync(notes: Annotation[]) {
+	sync(notes: Pick<Annotation, 'id' | 'text' | 'done' | 'position'>[]) {
 		const keep = new Set(notes.map((n) => n.id));
 		for (const [id, m] of this.markers) {
 			if (!keep.has(id)) {
