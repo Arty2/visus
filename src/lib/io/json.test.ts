@@ -1,32 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { newItem } from '$lib/store/items';
+import { newAnnotation, newViewpoint } from '$lib/store/notes';
 import { fromJSON, toJSON } from './json';
 
 describe('toJSON / fromJSON', () => {
-	it('round-trips a list of items', () => {
-		const items = [newItem('a'), { ...newItem('b'), done: true }];
-		expect(fromJSON(toJSON(items))).toEqual(items);
-	});
-
-	it('accepts a bare array, not just the wrapped export shape', () => {
-		const items = [newItem('a')];
-		expect(fromJSON(JSON.stringify(items))).toEqual(items);
+	it('round-trips notes and viewpoints', () => {
+		const notes = {
+			annotations: [
+				newAnnotation('a', [1, 2, 3]),
+				{ ...newAnnotation('b', [0, 0, 0]), done: true }
+			],
+			viewpoints: [newViewpoint('Hall', [0, 1.6, 0], 1)]
+		};
+		expect(fromJSON(toJSON(notes, 'house.dae'))).toEqual(notes);
 	});
 
 	it('rejects text that is not JSON', () => {
 		expect(() => fromJSON('not json')).toThrow(/not valid JSON/);
 	});
 
-	it('rejects JSON that is not a recognised item list', () => {
-		expect(() => fromJSON('{}')).toThrow(/not a recognised item list/);
-		expect(() => fromJSON('[{"foo":"bar"}]')).toThrow(/not a recognised item list/);
+	it('rejects JSON that is not a set of notes', () => {
+		expect(() => fromJSON('null')).toThrow(/not a recognised set of notes/);
+		expect(() => fromJSON('{"annotations":[{"foo":1}]}')).toThrow(/not a recognised/);
+		expect(() => fromJSON('{"viewpoints":"x"}')).toThrow(/not a recognised/);
 	});
 
-	// An empty list is a valid reading, not a parse failure — whether to
-	// *apply* one is the caller's call (see +page.svelte). Asserted so the
-	// round trip stays total: anything this app writes, it can read back.
-	it('reads an empty list back as an empty list', () => {
-		expect(fromJSON(toJSON([]))).toEqual([]);
-		expect(fromJSON('[]')).toEqual([]);
+	// Empty is a valid reading; refusing to apply it is the page's call.
+	it('reads an empty set as empty, not as an error', () => {
+		expect(fromJSON('{}')).toEqual({ annotations: [], viewpoints: [] });
 	});
 });

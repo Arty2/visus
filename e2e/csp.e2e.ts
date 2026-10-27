@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import vercel from '../vercel.json' with { type: 'json' };
+import { placeNote, ready } from './helpers';
 
 // A CSP violation lands in the console, not in a failed request — Chromium
 // still renders the page and nothing else says the policy broke. This is
@@ -11,23 +12,26 @@ import vercel from '../vercel.json' with { type: 'json' };
 // Exercises the local-first export/import path deliberately: that's the
 // flow most likely to need something CSP doesn't already allow (a blob:
 // URL, a worker) as this skeleton grows.
-test('the page loads and the export/import flow runs with no console errors', async ({ page }) => {
+// The model loaders have their own run under this policy in models.e2e.ts,
+// and the headset in xr.e2e.ts.
+test('the viewer loads and the note export/import flow runs with no console errors', async ({
+	page
+}) => {
 	const errors: string[] = [];
 	page.on('console', (msg) => {
 		if (msg.type() === 'error') errors.push(msg.text());
 	});
 	page.on('pageerror', (err) => errors.push(String(err)));
 
-	await page.goto('/');
-	await page.getByLabel('New item').fill('csp check');
-	await page.getByLabel('New item').press('Enter');
+	await ready(page);
+	await placeNote(page, 'csp check');
 
 	const [download] = await Promise.all([
 		page.waitForEvent('download'),
 		page.getByRole('button', { name: 'Export JSON' }).click()
 	]);
 	const path = await download.path();
-	await page.getByLabel('Import').setInputFiles(path!);
+	await page.getByLabel('Import notes').setInputFiles(path!);
 
 	expect(errors).toEqual([]);
 });
@@ -57,6 +61,8 @@ test('the policy the browser receives is the one that was configured', async ({ 
 	// Security Policy. Asserted so that "tighten the CSP" as a tidy-up has to
 	// argue with a test rather than silently break a future worker or export.
 	expect(csp).toContain('blob:');
+	// Embedded glTF buffers — see vite.config.ts.
+	expect(csp).toMatch(/connect-src [^;]*data:/);
 	expect(csp).toContain("'wasm-unsafe-eval'");
 
 	// Not a bug, and not ours: `frame-ancestors` is ignored in a meta CSP by

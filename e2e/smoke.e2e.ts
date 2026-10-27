@@ -1,124 +1,122 @@
 import { expect, test } from '@playwright/test';
 import pkg from '../package.json' with { type: 'json' };
+import { placeNote, ready } from './helpers';
 
-test('the starter page renders and the version credit matches package.json', async ({ page }) => {
-	await page.goto('/');
-	await expect(page).toHaveTitle('osseus');
+test('the page renders and the version credit matches package.json', async ({ page }) => {
+	await ready(page);
+	await expect(page).toHaveTitle('visus');
 	await expect(page.locator('.credit')).toHaveText(`v${pkg.version}`);
+	await expect(page.getByRole('heading', { name: 'Sample pavilion' })).toBeVisible();
 });
 
-test('adding and ticking an item persists across a reload', async ({ page }) => {
-	await page.goto('/');
-	const draft = page.getByLabel('New item');
-	await draft.fill('write the README');
-	await draft.press('Enter');
+test('the sample opens with the cameras it carries, and a view can be looked from', async ({
+	page
+}) => {
+	await ready(page);
+	for (const name of ['Approach', 'Under the roof', 'Bench']) {
+		await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+	}
+	await page.getByRole('button', { name: 'Bench' }).click();
+	await expect(page.getByRole('button', { name: 'Bench' })).toHaveAttribute('aria-current', 'true');
+});
 
-	const row = page.getByRole('listitem').filter({ hasText: 'write the README' });
-	await expect(row).toBeVisible();
-
-	await row.getByRole('checkbox').check();
-	await expect(row.locator('.done')).toHaveText('write the README');
-
+test('a note placed on the model persists across a reload', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'Check the step height');
 	await page.reload();
-	const reloadedRow = page.getByRole('listitem').filter({ hasText: 'write the README' });
-	await expect(reloadedRow.getByRole('checkbox')).toBeChecked();
+	await expect(page.locator('.note-text')).toHaveValue('Check the step height');
 });
 
-test('removing an item takes it off the list, and undo puts it back', async ({ page }) => {
-	await page.goto('/');
-	const draft = page.getByLabel('New item');
-	await draft.fill('temporary');
-	await draft.press('Enter');
+test('resolving and deleting a note, and undo putting it back', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'temporary');
+	await page.getByRole('checkbox', { name: /Resolved/ }).check();
+	await expect(page.locator('.note-text.done')).toHaveValue('temporary');
 
-	const row = page.getByRole('listitem').filter({ hasText: 'temporary' });
-	await row.getByRole('button', { name: /remove/i }).click();
-	await expect(row).toHaveCount(0);
-
-	await expect(page.getByRole('status')).toContainText('Deleted');
+	await page.getByRole('button', { name: 'Delete note 1' }).click();
+	await expect(page.locator('.note-text')).toHaveCount(0);
+	await expect(page.getByRole('status')).toContainText('Deleted “temporary”');
 	await page.getByRole('button', { name: 'Undo' }).click();
-	await expect(page.getByRole('listitem').filter({ hasText: 'temporary' })).toBeVisible();
+	await expect(page.locator('.note-text')).toHaveValue('temporary');
 
-	// The offer is spent once taken, and the restored list survives a reload —
-	// undo writes through to storage like any other change.
-	await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
 	await page.reload();
-	await expect(page.getByRole('listitem').filter({ hasText: 'temporary' })).toBeVisible();
+	await expect(page.locator('.note-text')).toHaveValue('temporary');
 });
 
-test('export downloads a JSON file that round-trips through import', async ({ page }) => {
-	await page.goto('/');
-	await page.getByLabel('New item').fill('exported item');
-	await page.getByLabel('New item').press('Enter');
+test('a saved view joins the list, can be renamed, and survives a reload', async ({ page }) => {
+	await ready(page);
+	await page.getByRole('button', { name: 'Save this view' }).click();
+	await expect(page.getByRole('button', { name: 'View 1', exact: true })).toBeVisible();
 
-	const [download] = await Promise.all([
-		page.waitForEvent('download'),
-		page.getByRole('button', { name: 'Export JSON' }).click()
-	]);
-	expect(download.suggestedFilename()).toBe('items.json');
-
-	const path = await download.path();
-	expect(path).toBeTruthy();
-
-	await page.getByLabel('Import').setInputFiles(path!);
-	await expect(page.getByRole('listitem').filter({ hasText: 'exported item' })).toBeVisible();
+	page.once('dialog', (dialog) => dialog.accept('From the lawn'));
+	await page.getByRole('button', { name: 'Rename View 1' }).click();
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'From the lawn', exact: true })).toBeVisible();
 });
 
-test('importing a malformed file shows an error instead of clearing the list', async ({ page }) => {
-	await page.goto('/');
-	await page.getByLabel('New item').fill('keep me');
-	await page.getByLabel('New item').press('Enter');
+test('notes export as JSON and Markdown, and each round-trips through import', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'exported note');
 
-	await page.getByLabel('Import').setInputFiles({
+	for (const [button, name] of [
+		['Export JSON', 'Sample pavilion.notes.json'],
+		['Export Markdown', 'Sample pavilion.notes.md']
+	]) {
+		const [download] = await Promise.all([
+			page.waitForEvent('download'),
+			page.getByRole('button', { name: button }).click()
+		]);
+		expect(download.suggestedFilename()).toBe(name);
+		const path = (await download.path())!;
+
+		await page.getByRole('button', { name: 'Delete note 1' }).click();
+		await expect(page.locator('.note-text')).toHaveCount(0);
+		await page.getByLabel('Import notes').setInputFiles(path);
+		await expect(page.locator('.note-text')).toHaveValue('exported note');
+	}
+});
+
+test('importing a malformed file shows an error and keeps the notes', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'keep me');
+	await page.getByLabel('Import notes').setInputFiles({
 		name: 'bad.json',
 		mimeType: 'application/json',
-		buffer: Buffer.from('{"not":"a list"}')
+		buffer: Buffer.from('{"annotations":"nope"}')
 	});
-
-	await expect(page.getByRole('alert')).toContainText('not a recognised item list');
-	await expect(page.getByRole('listitem').filter({ hasText: 'keep me' })).toBeVisible();
+	await expect(page.getByRole('alert')).toContainText('not a recognised set of notes');
+	await expect(page.locator('.note-text')).toHaveValue('keep me');
 });
 
-// The regression this exists for: fromMarkdown reads prose as zero items, and
-// an earlier version applied that, so importing a README emptied the list
-// with nothing said and no way back.
-test('importing prose with no list in it is refused, not applied', async ({ page }) => {
-	await page.goto('/');
-	await page.getByLabel('New item').fill('keep me too');
-	await page.getByLabel('New item').press('Enter');
-
-	await page.getByLabel('Import').setInputFiles({
+// fromMarkdown reads prose as nothing; applying that would empty the notes.
+test('importing prose with no notes in it is refused, not applied', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'keep me too');
+	await page.getByLabel('Import notes').setInputFiles({
 		name: 'README.md',
 		mimeType: 'text/markdown',
-		buffer: Buffer.from('# Readme\n\nJust prose. No list here at all.\n')
+		buffer: Buffer.from('# Readme\n\n- [ ] a to-do with nowhere to pin it\n')
 	});
-
-	await expect(page.getByRole('alert')).toContainText('contains no items');
-	await expect(page.getByRole('listitem').filter({ hasText: 'keep me too' })).toBeVisible();
+	await expect(page.getByRole('alert')).toContainText('contains no notes');
+	await expect(page.locator('.note-text')).toHaveValue('keep me too');
 });
 
-test('an import is undoable, because it replaces everything', async ({ page }) => {
-	await page.goto('/');
-	await page.getByLabel('New item').fill('the original list');
-	await page.getByLabel('New item').press('Enter');
-
-	await page.getByLabel('Import').setInputFiles({
+test('an import is undoable, because it replaces every note', async ({ page }) => {
+	await ready(page);
+	await placeNote(page, 'the original');
+	await page.getByLabel('Import notes').setInputFiles({
 		name: 'other.md',
 		mimeType: 'text/markdown',
-		buffer: Buffer.from('- [ ] something else entirely\n')
+		buffer: Buffer.from('- [ ] something else entirely @ 0, 0.5, 0\n')
 	});
-
-	await expect(
-		page.getByRole('listitem').filter({ hasText: 'something else entirely' })
-	).toBeVisible();
-	await expect(page.getByRole('listitem').filter({ hasText: 'the original list' })).toHaveCount(0);
-
-	await expect(page.getByRole('status')).toContainText('Imported 1 item');
+	await expect(page.locator('.note-text')).toHaveValue('something else entirely');
+	await expect(page.getByRole('status')).toContainText('Imported 1');
 	await page.getByRole('button', { name: 'Undo' }).click();
-	await expect(page.getByRole('listitem').filter({ hasText: 'the original list' })).toBeVisible();
+	await expect(page.locator('.note-text')).toHaveValue('the original');
 });
 
 test('the version opens what changed in it', async ({ page }) => {
-	await page.goto('/');
+	await ready(page);
 	const dialog = page.getByRole('dialog');
 	await expect(dialog).toBeHidden();
 
@@ -131,13 +129,11 @@ test('the version opens what changed in it', async ({ page }) => {
 	await expect(dialog).toBeHidden();
 });
 
-// A first run stays closed (the page is its own introduction); a version
-// someone hasn't seen yet opens on its own, once.
 test('what changed opens by itself after an update, and only once', async ({ page }) => {
-	await page.goto('/');
+	await ready(page);
 	await expect(page.getByRole('dialog')).toBeHidden();
 
-	await page.evaluate(() => localStorage.setItem('osseus:seen-version', '0.0.1'));
+	await page.evaluate(() => localStorage.setItem('visus:seen-version', '0.0.1'));
 	await page.reload();
 	await expect(page.getByRole('dialog')).toBeVisible();
 

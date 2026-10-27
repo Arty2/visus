@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A hand-written fixture in the shape SketchUp exports: inches, Z up, a
+     textured face whose image isn't alongside, and a scene saved as a camera. -->
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+	<asset>
+		<unit name="inch" meter="0.0254"/>
+		<up_axis>Z_UP</up_axis>
+	</asset>
+	<library_cameras>
+		<camera id="cam" name="skp_camera_Front_Door">
+			<optics>
+				<technique_common>
+					<perspective><yfov>35</yfov><aspect_ratio>1.5</aspect_ratio><znear>1</znear><zfar>1000</zfar></perspective>
+				</technique_common>
+			</optics>
+		</camera>
+	</library_cameras>
+	<library_images>
+		<image id="tile-image"><init_from>floor/tile.jpg</init_from></image>
+	</library_images>
+	<library_effects>
+		<effect id="tile-effect">
+			<profile_COMMON>
+				<newparam sid="tile-surface"><surface type="2D"><init_from>tile-image</init_from></surface></newparam>
+				<newparam sid="tile-sampler"><sampler2D><source>tile-surface</source></sampler2D></newparam>
+				<technique sid="common">
+					<lambert><diffuse><texture texture="tile-sampler" texcoord="UVSET0"/></diffuse></lambert>
+				</technique>
+			</profile_COMMON>
+		</effect>
+	</library_effects>
+	<library_materials>
+		<material id="tile" name="tile"><instance_effect url="#tile-effect"/></material>
+	</library_materials>
+	<library_geometries>
+		<geometry id="floor-mesh">
+			<mesh>
+				<source id="floor-positions">
+					<float_array id="floor-positions-array" count="12">-80 -80 0 80 -80 0 80 80 0 -80 80 0</float_array>
+					<technique_common>
+						<accessor source="#floor-positions-array" count="4" stride="3">
+							<param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+						</accessor>
+					</technique_common>
+				</source>
+				<source id="floor-uvs">
+					<float_array id="floor-uvs-array" count="8">0 0 1 0 1 1 0 1</float_array>
+					<technique_common>
+						<accessor source="#floor-uvs-array" count="4" stride="2">
+							<param name="S" type="float"/><param name="T" type="float"/>
+						</accessor>
+					</technique_common>
+				</source>
+				<vertices id="floor-vertices"><input semantic="POSITION" source="#floor-positions"/></vertices>
+				<triangles material="tile" count="2">
+					<input semantic="VERTEX" source="#floor-vertices" offset="0"/>
+					<input semantic="TEXCOORD" source="#floor-uvs" offset="1" set="0"/>
+					<p>0 0 1 1 2 2 0 0 2 2 3 3</p>
+				</triangles>
+			</mesh>
+		</geometry>
+	</library_geometries>
+	<library_visual_scenes>
+		<visual_scene id="scene">
+			<node name="Floor">
+				<instance_geometry url="#floor-mesh">
+					<bind_material><technique_common><instance_material symbol="tile" target="#tile"/></technique_common></bind_material>
+				</instance_geometry>
+			</node>
+			<node name="skp_camera_Front_Door">
+				<matrix>1 0 0 0 0 0 -1 -200 0 1 0 63 0 0 0 1</matrix>
+				<instance_camera url="#cam"/>
+			</node>
+		</visual_scene>
+	</library_visual_scenes>
+	<scene><instance_visual_scene url="#scene"/></scene>
+</COLLADA>

@@ -1,18 +1,16 @@
 import { expect, test } from '@playwright/test';
+import { placeNote, ready } from './helpers';
 
 /*
  * The failure path nothing else exercises: a browser that refuses to write.
  * A private window, blocked site data and a full quota all surface the same
  * way — `localStorage.setItem` throws — and an app that swallows that looks
  * exactly like one that saved, right up until the reload that loses
- * everything. Stubbed here rather than waited for, because there is no way
- * to fill a real quota quickly and no reason to.
+ * everything. Stubbed rather than waited for.
  */
-test('a browser that refuses to save says so, and the list still works', async ({ page }) => {
+test('a browser that refuses to save says so, and notes still work', async ({ page }) => {
 	await page.addInitScript(() => {
-		// Patched on the prototype, not on the instance: `Storage` intercepts
-		// own-property definition and would quietly file `setItem` as a stored
-		// *key* instead of shadowing the method, leaving the stub inert.
+		// On the prototype: `Storage` files an own `setItem` as a stored key.
 		Object.defineProperty(Storage.prototype, 'setItem', {
 			configurable: true,
 			value: () => {
@@ -21,13 +19,8 @@ test('a browser that refuses to save says so, and the list still works', async (
 		});
 	});
 
-	await page.goto('/');
-	await page.getByLabel('New item').fill('will not persist');
-	await page.getByLabel('New item').press('Enter');
-
-	// Added in memory — the tab is still usable, which is the point of
-	// reporting rather than throwing...
-	await expect(page.getByRole('listitem').filter({ hasText: 'will not persist' })).toBeVisible();
-	// ...and the page says plainly that it won't survive a reload.
+	await ready(page);
+	await placeNote(page, 'will not persist');
+	await expect(page.locator('.note-text')).toHaveValue('will not persist');
 	await expect(page.getByRole('alert')).toContainText('refused to save');
 });

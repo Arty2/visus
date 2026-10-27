@@ -1,8 +1,14 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { placeNote, ready } from './helpers';
 
-test('the starter page has no automatically detectable a11y violations', async ({ page }) => {
-	await page.goto('/');
+test('the page, with a note and a saved view, has no automatically detectable a11y violations', async ({
+	page
+}) => {
+	await ready(page);
+	await placeNote(page, 'accessible');
+	await page.getByRole('button', { name: 'Save this view' }).click();
+	await page.getByText('Controls').click();
 	const results = await new AxeBuilder({ page }).analyze();
 	expect(results.violations).toEqual([]);
 });
@@ -10,7 +16,7 @@ test('the starter page has no automatically detectable a11y violations', async (
 test('the what-changed dialog has no automatically detectable a11y violations', async ({
 	page
 }) => {
-	await page.goto('/');
+	await ready(page);
 	await page.getByRole('button', { name: /^v\d/ }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 	const results = await new AxeBuilder({ page }).analyze();

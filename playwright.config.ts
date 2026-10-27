@@ -33,7 +33,16 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'], launchOptions: { executablePath } }
+			use: {
+				...devices['Desktop Chrome'],
+				launchOptions: {
+					executablePath,
+					// Headless Chromium has no GPU. The whole app is a WebGL canvas,
+					// and current Chromium only falls back to its software renderer
+					// when told to — without these, every viewer test sees no canvas.
+					args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+				}
+			}
 		}
 	]
 });

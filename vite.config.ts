@@ -80,8 +80,14 @@ export default defineConfig({
 					// blob: alongside 'self' for the same reason it's in img-src and
 					// worker-src: a blob URL is this tab's own memory, so fetching one
 					// back (how several file-reading helpers are written) opens no
-					// network path that 'self' didn't already allow.
-					'connect-src': ['self', 'blob:'],
+					// network path that 'self' didn't already allow. visus reads
+					// every opened model's parts back this way, and parses .dae XML
+					// through it (see src/lib/viewer/load.ts).
+					//
+					// data: for the same reason: a .gltf exported with its buffers
+					// embedded carries them as data: URIs, and GLTFLoader fetches
+					// them. Bytes already in the file, no network, nothing executed.
+					'connect-src': ['self', 'blob:', 'data:'],
 					'manifest-src': ['self'],
 					// blob: because reading a large local import or running work off
 					// the main thread — a Web Worker created from a bundler-inlined

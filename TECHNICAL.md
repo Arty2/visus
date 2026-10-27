@@ -75,8 +75,10 @@ than pass — the line-budget gate originally reported "ok" when it couldn't
 read the file at all, which is the one outcome worse than not having it.
 
 `scripts/budget.sh` measures the gzipped JavaScript the browser downloads to
-run the app and fails over 100 KB. Raise the number deliberately, in the
-commit that earns it — never as a side effect of an unrelated change.
+run the app and fails over 240 KB — the skeleton's 100 KB, raised in 0.1.0
+for three.js (see § The viewer and the comment in the script). Raise it
+deliberately, in the commit that earns it — never as a side effect of an
+unrelated change.
 
 Every `pnpm run gates` invocation also appends one line to the local,
 gitignored `.claude/logs/gates.jsonl` — see § Self-improving below.
@@ -354,6 +356,59 @@ means in practice:
   `gates.jsonl` (CI runners are ephemeral; the log never survives past one
   run there) and only visible if someone writes them down.
 
+## The viewer
+
+**three.js is the one runtime dependency, on purpose.** WebXR hands an app a
+WebGL context and head and controller poses and nothing else; between that
+and a model on screen sit a scene graph, a renderer, and glTF and COLLADA
+parsers. Writing those by hand is a project of its own, and the alternatives
+(A-Frame, Babylon.js) are larger and bring a framework with them. three.js
+is imported from `src/routes/+page.svelte` after first paint, so the page
+arrives fast; the budget counts it anyway, because the headset downloads it
+before anything is visible. Held back on purpose, and what would end it:
+
+- **Draco, Meshopt and KTX2** decoders. Each is a WASM or worker blob
+  (already allowed by the CSP) plus weight; a compressed glTF is refused with
+  a message instead. Worth adding the day real exports arrive compressed.
+- **Controller models** (`XRControllerModelFactory`) fetch from a CDN, which
+  `connect-src 'self'` refuses; a plain grip box is drawn instead. Vendoring
+  the Quest's two controller meshes into `static/` would end that.
+- **three-mesh-bvh**, which would make the teleport arc and pointing cheap on
+  huge models (see the README's Limitations). Add it when one stutters.
+
+**How it moves you.** The headset owns the head's pose inside the play
+space; the app owns only where the play space — the _dolly_ — sits, and how
+the model's group is scaled and placed. Every move (`rig.ts`) is "where must
+the dolly go so the head ends up there": cameras put the eyes on the eye
+point, teleports put the feet on the floor, turning rotates about the head.
+Scaling changes the model's group, never the dolly, so the eye distance
+stays right. Notes and saved views are kept in model coordinates and
+survive any scale.
+
+**Text entry** inside an immersive session is the app's own job — there is
+no system keyboard and no DOM overlay in `immersive-vr` — so menus and the
+keyboard are canvases drawn with the 2D API on planes (`panel.ts`).
+
+**COLLADA under Trusted Types.** `ColladaLoader` parses with
+`DOMParser.parseFromString`, which `require-trusted-types-for 'script'`
+treats as a sink even for XML. Rather than allow-list a policy that blesses
+any string, `load.ts` parses the XML with `XMLHttpRequest` from a `blob:`
+URL (`responseType: 'document'`, not a sink) and stands in for `DOMParser`
+for the one synchronous `parse()` call. `e2e/models.e2e.ts` fails if that
+path stops working under the real policy.
+
+**`connect-src data:`** is the one directive widened for this app: a
+`.gltf` exported with embedded buffers carries them as `data:` URIs, and
+`GLTFLoader` fetches them. No network, nothing executed.
+
+**Tested without a headset** through Meta's Immersive Web Emulation Runtime
+(`iwer`, a devDependency injected only in `e2e/xr.e2e.ts`): an emulated
+Quest 3 whose controllers the tests press, push and move. It proves the
+session starts under the CSP and every control is wired and doesn't throw;
+comfort, frame rate and legibility still need a headset. Headless Chromium
+draws WebGL only with its software renderer switched on — see the launch
+flags in `playwright.config.ts`.
+
 ## Known limits
 
 - **No component-level test runner.** `vitest` here covers pure logic only
@@ -373,7 +428,7 @@ means in practice:
 - **No component library, no CSS framework, no crypto library** — matching
   the sibling projects. Pull one in deliberately, with the trade-off written
   down, rather than by default.
-- **Undo is one step, not a stack.** `itemsStore.undoable` holds a single
+- **Undo is one step, not a stack.** `notesStore.undoable` holds a single
   snapshot, taken before a remove or a replace, and any constructive edit
   retires it — undoing a delete after three further edits would take those
   edits with it, which isn't what the word means to whoever pressed it. A
@@ -382,7 +437,7 @@ means in practice:
   "anything that can lose data owes a way back".
 - **A failed write is reported, not retried.** If `localStorage.setItem`
   throws — a full quota, a private window, blocked site data — the store
-  sets `storageBroken` and the page says the list won't survive a reload.
+  sets `storageBroken` and the page says the notes won't survive a reload.
   There's no retry, no fallback to IndexedDB, and no queue. That's the right
   size for a skeleton; a project that genuinely can't lose data needs a real
   strategy, decided deliberately.

@@ -6,8 +6,8 @@
 	import changelogText from '../../CHANGELOG.md?raw';
 	import { parseChangelog, segments, shouldAnnounce } from './changelog';
 
-	// Prefixed with the project name like every other key — see items.svelte.ts.
-	const SEEN_KEY = 'osseus:seen-version';
+	// Prefixed with the project name like every other key — see notes.svelte.ts.
+	const SEEN_KEY = 'visus:seen-version';
 
 	const latest = parseChangelog(changelogText)[0];
 	let dialog: HTMLDialogElement | undefined = $state();
@@ -19,7 +19,7 @@
 
 	// Storage can throw (a private window, a blocked profile). Losing this only
 	// means the dialog might open once more than it should, so it's not worth
-	// telling anyone about — unlike a lost item, see items.svelte.ts.
+	// telling anyone about — unlike a lost item, see notes.svelte.ts.
 	function markSeen() {
 		try {
 			localStorage.setItem(SEEN_KEY, __VERSION__);

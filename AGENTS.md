@@ -14,6 +14,10 @@ edit these, not that.
 
 ## What this is
 
+**This repo is `visus`**, a WebXR model viewer for the Meta Quest (see the
+README), templated from `osseus` and already bootstrapped. What follows is
+the skeleton's own description, kept because its rules still apply here.
+
 `osseus` is a starter skeleton, not an app. Its job is to make the _next_
 small web app fast to start — tooling, CI shape, security posture, docs and
 a pull request template already decided — so a session's first turn on a

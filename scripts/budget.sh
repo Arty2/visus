@@ -12,7 +12,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-BUDGET_KB=100
+# 100 KB was the skeleton's number, for a page of forms. visus is a WebGL
+# viewer: three.js plus its glTF and COLLADA loaders and orbit controls are
+# ~190 KB of this on their own, and there is no lighter way to put a model in
+# a headset — WebXR hands over a GL context and nothing else. They're
+# imported after first paint (src/routes/+page.svelte), so the page itself
+# still arrives fast; this counts them anyway, because a headset on hotel
+# wi-fi downloads them all before anything can be seen. 240 leaves ~20 KB of
+# headroom over 0.1.0's 221: enough for features, not for a second engine.
+BUDGET_KB=240
 DIR=.svelte-kit/output/client/_app/immutable
 
 if [ ! -d "$DIR" ]; then

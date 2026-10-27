@@ -57,3 +57,26 @@ starts with nothing below the line.
 ---
 
 <!-- Newest entries go directly below this line. -->
+
+## 2026-10-27 — A WebGL app outgrows the 100 KB budget on day one
+
+visus is a WebXR model viewer; three.js and two loaders are ~190 KB gzipped
+before any app code, so `scripts/budget.sh` went to 240 KB in the first
+commit, with the reasoning in the script. osseus could say up front that the
+number is for a page of forms, and suggest measuring the first-paint chunk
+separately from what's imported later.
+
+## 2026-10-27 — Trusted Types blocks `DOMParser`, even for XML
+
+`require-trusted-types-for 'script'` makes `DOMParser.parseFromString` a
+sink, so three.js's ColladaLoader fails under the skeleton's CSP. Worked
+around without a policy (XHR `responseType: 'document'` from a blob: URL,
+see TECHNICAL.md § The viewer). Worth a line in osseus's CSP notes: any XML
+or SVG parsing library will hit this.
+
+## 2026-10-27 — Headless Chromium draws no WebGL without flags
+
+Every canvas test saw nothing until Playwright launched Chromium with
+`--use-angle=swiftshader --enable-unsafe-swiftshader`. osseus's
+`playwright.config.ts` could carry them, commented, for the first project
+that draws.

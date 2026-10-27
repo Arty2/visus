@@ -1,46 +1,139 @@
-# osseus
+# visus
 
-**osseus** is a starter template for small web apps, not an app itself. It
-settles the dozen things every new project otherwise re-decides — how data
-is stored and got back out, security headers, tests, CI, versioning, a pull
-request template, instructions for a coding agent — so the first day goes on
-the app. Its own starter page is a real, working local-first list: saved in
-the browser, exportable and importable as JSON or Markdown, with one step of
-undo behind anything that can lose data.
+**visus** is a viewer for 3D models in a Meta Quest 3. Open a building or
+an object exported from SketchUp, Blender or anything else that writes glTF
+or COLLADA, put the headset on, and walk through it at full size — or shrink
+it to a model on a table and look down on it. Jump between the cameras
+saved in the file, save views of your own, and pin notes to the places that
+need attention. It runs in the Quest's own browser; nothing to install, and
+the model never leaves the device.
 
-- **Source** — [github.com/arty2/osseus](https://github.com/arty2/osseus)
-- **New here?** [OVERVIEW.md](./OVERVIEW.md) explains what's in the box in
-  plain language, with a diagram; this README is the quickstart.
+- **Source** — [github.com/arty2/visus](https://github.com/arty2/visus)
 
 ## Name
 
-Greek ὀστέον, Latin _os_, _ossis_ — bone. The skeleton a new web app is
-built on.
+Latin _vīsus_ — sight, a vision; also the thing seen.
 
-## Two layers
+## Opening a model
 
-The template is in two layers, kept apart so the first can be reused on a
-project built with anything:
+**Open model…** takes `.glb`, `.gltf` and `.dae`. Pick the model and its
+textures together (or the `.gltf` with its `.bin`): the browser hands files
+over without their folders, so visus matches each texture by its file name.
+Anything the model asks for that wasn't picked is listed, and the model is
+shown without it.
 
-- **Portable** — how the work is done: instructions for agents
-  (`AGENTS.md`), this README's shape, the pull request template, versioning
-  and `CHANGELOG.md`, `TEMPLATE_FEEDBACK.md`, and what was learned
-  (`docs/LEARNINGS.md`). None of it names a tool.
-- **Stack** — what it's built with: SvelteKit, Svelte 5, TypeScript, pnpm,
-  Playwright, GitHub Actions, Vercel. `STACK.md`, `TECHNICAL.md`, `src/`,
-  `e2e/`, `scripts/`, `.github/workflows/`, `vercel.json`.
+| From      | Export as                                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| SketchUp  | **File → Export → 3D Model → COLLADA (.dae)**. Each Scene becomes a camera; tick _Export texture maps_.         |
+| Blender   | **File → Export → glTF 2.0**, format _glTF Binary (.glb)_, with _Cameras_ ticked. Leave compression off.        |
+| Elsewhere | Anything that writes glTF 2.0 or COLLADA 1.4. Units are read from the file; SketchUp's inches arrive as metres. |
 
-A different stack replaces the second layer and keeps the first.
+`.skp` files can't be read directly — SketchUp's own format isn't open. The
+last model opened is remembered, so after a reload **Reopen** brings it back
+without the file picker. **Sample** opens a small pavilion to try things on.
 
-## Using it
+On the Quest, files come from the headset's own storage: download them in
+the Quest Browser, or copy them over USB into _Download_.
 
-On GitHub, **Use this template → Create a new repository**. Then open
-`AGENTS.md` and work through
-[§ Bootstrapping](./AGENTS.md#bootstrapping) — written for an agent session
-picking this up cold, but a checklist either way. It renames the project,
-rewrites this README for the people who'll use the app, resets the version,
-and hands over to `STACK.md` for the deployment and the framework's own
-agent tooling.
+## In the headset
+
+**Enter VR** starts. The model appears as a miniature on a table in front of
+you, with the menu open.
+
+| Control                      | Does                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| Left stick                   | Walk, in the direction you're looking                                     |
+| Right stick forward, release | Teleport. Aim at the miniature to step into it at 1:1                     |
+| Right stick left / right     | Turn by 30°                                                               |
+| A / B                        | Next / previous view                                                      |
+| X                            | Place a note where the right hand points                                  |
+| Y                            | Open or close the menu                                                    |
+| One grip                     | Grab the world and pull yourself through it                               |
+| Both grips                   | Scale and turn the model; snaps to 1:1, 1:10, 1:20, 1:50, 1:100…          |
+| Trigger                      | Press a menu button or key; point at a note to edit, resolve or delete it |
+
+The **menu** has the scales (_Fit_ chooses the largest that fits on the
+table; _1:1_ puts you life-size where the right hand points), previous and
+next view, **Save view**, **Add note**, notes shown or hidden, and **Exit
+VR**.
+
+**Views** are the cameras saved in the model — SketchUp's Scenes, Blender's
+cameras — followed by the ones you saved. Going to a view puts your eyes
+where the camera was, facing its way, life-size; which way you look up or
+down is left to you.
+
+**Notes** are typed on a keyboard that appears in front of you. Shift comes
+on by itself at the start of a sentence; shifted, comma and full stop give
+`?` and `!`.
+
+Hand tracking works for pointing and pinching at the menu and keyboard;
+pinching at empty space opens the menu. Walking, teleporting and scaling
+need the controllers.
+
+## On a screen
+
+The same page works without a headset. Drag to orbit, right-drag or the
+arrow keys to pan, scroll to zoom. Click a view's name to look from it, and
+**Save this view** to keep the current one. **Add note**, then click the
+model, places a note; type in the list beside it.
+
+## Notes and views
+
+Notes belong to a model: each opened file keeps its own, saved in this
+browser and found again whenever the same file is reopened. A file
+re-exported with changes is a new file, with notes of its own — export the
+old ones and import them if they still apply.
+
+A note can be **resolved** (ticked) rather than deleted. Deleting one, or
+importing over them, can be undone once.
+
+**Export Markdown** writes the notes as a checklist anyone can read, each
+with where it is pinned in metres:
+
+```
+# Notes on house.dae
+
+- [ ] Handrail missing on the landing @ 2.150, 3.000, -4.400
+- [x] Door swings into the corridor @ -1.200, 0.000, 6.800
+```
+
+**Export JSON** writes the notes and the saved views. Either imports back
+into whichever model is open; an import with nothing in it is refused.
+
+## What leaves this machine
+
+Nothing. Models are read from the files you pick, in the browser; notes,
+views and the last model opened stay in this browser's storage. The page
+makes no requests beyond loading itself.
+
+## Limitations
+
+- **Formats**: no `.skp`, `.fbx`, `.obj` or `.ifc`; export to glTF or
+  COLLADA. Compressed glTF (Draco, Meshopt, KTX2 textures) is refused with a
+  message — export without compression.
+- **Size**: a model has to fit in the headset's memory, and every triangle
+  is drawn every frame. Large SketchUp exports with dense furniture or
+  vegetation may stutter; purge unused components and hide what isn't needed
+  before exporting.
+- **Teleporting and placing notes** test against every mesh in the model,
+  so on very large models the teleport arc can lag behind the hand.
+- **Animation** in the model isn't played; its cameras are used as still
+  views.
+- **Saved views and notes** are kept per browser. Clearing site data, or a
+  private window, loses them — export to keep them.
+- **One person**: there's no sharing a session with someone else in VR.
+
+## Development
+
+```
+pnpm install
+pnpm dev
+pnpm test
+```
+
+Instructions for working on it are in [AGENTS.md](./AGENTS.md) and
+[STACK.md](./STACK.md); [TECHNICAL.md](./TECHNICAL.md) has the CI, the
+gates, the security policy and the deployment runbook.
 
 ## Contributing
 
@@ -65,78 +158,12 @@ Numbered `0.minor.patch`, and the leading zero never changes:
 
 [CHANGELOG.md](./CHANGELOG.md) is what each version gained.
 
-## The stack
-
-SvelteKit 2, Svelte 5 runes, TypeScript strict, deployed to Vercel's free
-tier. Evergreen browsers only, a 100 KB budget on the JavaScript the browser
-downloads, and a Content Security Policy that is strict about what matters
-(third-party script origins, markup injection) and deliberately loose about
-local-first mechanics that cost nothing to allow.
-
-```
-pnpm install
-pnpm dev
-```
-
-| Command          | Does                                                    |
-| ---------------- | ------------------------------------------------------- |
-| `pnpm check`     | `svelte-check` against the strict tsconfig              |
-| `pnpm lint`      | Prettier and ESLint                                     |
-| `pnpm gates`     | Project rules a linter can't enforce — see TECHNICAL.md |
-| `pnpm quick`     | Gates, types and unit tests — no browser, no build      |
-| `pnpm test:unit` | Vitest, pure logic only                                 |
-| `pnpm test:e2e`  | Playwright against a production build on port 4173      |
-| `pnpm test`      | Everything CI runs, in CI's order — the pre-push check  |
-| `pnpm build`     | Production build through `@sveltejs/adapter-vercel`     |
-| `pnpm budget`    | Fails if the gzipped JS bundle exceeds 100 KB           |
-| `pnpm feedback`  | Appends a dated stub to `TEMPLATE_FEEDBACK.md`          |
-
-`pnpm quick` is the one to run while working. `pnpm test` is what to run
-before asking for a change to land. Deployment is Vercel's Git integration —
-see [TECHNICAL.md § Deployment](./TECHNICAL.md#deployment-vercel-hobbyfree-tier).
-
-```
-src/
-  app.html    document shell — no inline scripts, no inline styles (see TECHNICAL.md § CSP)
-  app.css     theme tokens per prefers-color-scheme, a minimal reset, prefers-reduced-motion
-  app.d.ts    ambient types, including __VERSION__
-  lib/
-    store/    the local-first data model: plain types + migrate() in items.ts,
-              a thin $state-backed class in items.svelte.ts
-    io/       JSON and Markdown export/import, hand-rolled; download.ts hands
-              the browser a file
-    changelog.ts, WhatsNew.svelte
-              CHANGELOG.md parsed, not rendered — the version number opens
-              the latest release, and does once by itself after an update
-  routes/     +layout.ts (prerendered), +layout.svelte, +page.svelte — a real,
-              working local-first list, not a placeholder
-e2e/          Playwright: the item list and its undo, a CSP/console-error
-              tripwire (which also exercises export/import), the computed
-              theme colours in both schemes, a browser that refuses to
-              save, an axe-core a11y pass
-scripts/
-  gates.sh    rules a linter can't enforce, run first in CI; also logs to
-              .claude/logs/gates.jsonl (local, gitignored — see AGENTS.md)
-  budget.sh   the 100 KB gzipped JS ceiling
-  feedback.sh appends a stub to TEMPLATE_FEEDBACK.md
-.claude/      settings.json + a SessionStart hook, so a Claude Code web session
-              lands with dependencies already installed
-```
-
-## The documents
-
-`AGENTS.md` and `STACK.md` (both imported by `CLAUDE.md`) are the
-instructions, portable and stack-specific; `TECHNICAL.md` covers CI
-internals, the deployment runbook, and the reasoning behind the security
-headers and CSP; `docs/LEARNINGS.md` is what projects built on this taught
-it; `docs/PATTERNS.md` is what was checked against outside practice;
-`TEMPLATE_FEEDBACK.md` is where a project logs friction with the skeleton,
-until it's folded into `docs/LEARNINGS.md`.
-
 ## License
 
 MIT — see [LICENSE](./LICENSE).
 
 ## Credit
 
-Dialectic Acheiropoieton of Heracles Papatheodorou and Claude.
+Dialectic Acheiropoieton of Heracles Papatheodorou and Claude. Built on the
+[osseus](https://github.com/arty2/osseus) skeleton, with
+[three.js](https://threejs.org).
