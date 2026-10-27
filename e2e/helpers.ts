@@ -34,3 +34,12 @@ export function collectErrors(page: Page): string[] {
 	page.on('pageerror', (err) => errors.push(String(err)));
 	return errors;
 }
+
+/**
+ * Waits for a model to be the one shown. Opening is real work — parsing,
+ * then a first frame from a software renderer — and under a full parallel
+ * run it outlasts the default five seconds now and then.
+ */
+export async function expectModel(page: Page, name: string) {
+	await expect(page.locator('.chip-title')).toHaveText(name, { timeout: 20_000 });
+}

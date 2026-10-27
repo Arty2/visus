@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
 import pkg from '../package.json' with { type: 'json' };
-import { placeNote, ready } from './helpers';
+import { expectModel, placeNote, ready } from './helpers';
 
 test('the page renders and the version credit matches package.json', async ({ page }) => {
 	await ready(page);
 	await expect(page).toHaveTitle('visus');
 	await expect(page.locator('.credit')).toHaveText(`v${pkg.version}`);
-	await expect(page.getByRole('heading', { name: 'Sample pavilion' })).toBeVisible();
+	await expectModel(page, 'Sample pavilion');
 });
 
 test('the sample opens with the cameras it carries, and a view can be looked from', async ({
@@ -25,6 +25,16 @@ test('a note placed on the model persists across a reload', async ({ page }) => 
 	await placeNote(page, 'Check the step height');
 	await page.reload();
 	await expect(page.locator('.note-text')).toHaveValue('Check the step height');
+});
+
+test('Escape leaves note-placing mode', async ({ page }) => {
+	await ready(page);
+	const add = page.getByRole('button', { name: 'Add note' });
+	await add.click();
+	await expect(add).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByRole('status')).toContainText('Click the model to place a note');
+	await page.keyboard.press('Escape');
+	await expect(add).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('resolving and deleting a note, and undo putting it back', async ({ page }) => {

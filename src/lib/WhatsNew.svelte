@@ -73,58 +73,79 @@
 
 <style>
 	.credit {
-		margin-top: 2rem;
-		opacity: 0.6;
-		font-size: 0.875rem;
+		margin: 0;
+		font-family: var(--mono);
+		font-size: 0.85rem;
+		color: var(--text-dim);
 	}
 
 	.version {
-		font: inherit;
-		padding: 0;
-		border: none;
+		padding: 0.25rem 0.6rem;
+		border: 1px solid var(--line-strong);
+		border-radius: 999px;
 		background: none;
 		color: inherit;
-		text-decoration: underline dotted;
+		font: inherit;
 		cursor: pointer;
 	}
 
+	.version:hover {
+		border-color: var(--accent-line);
+		color: var(--accent);
+	}
+
 	dialog {
-		max-width: min(28rem, calc(100vw - 2rem));
+		width: min(30rem, calc(100vw - 2rem));
 		padding: 1.5rem;
-		border: 1px solid var(--ink);
-		background: var(--paper);
-		color: var(--ink);
+		border: 1px solid var(--line-strong);
+		border-radius: 20px;
+		background: var(--panel);
+		color: var(--text);
+		box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
 	}
 
 	dialog::backdrop {
-		background: rgb(0 0 0 / 0.4);
+		background: rgba(3, 5, 8, 0.7);
 	}
 
 	h2 {
 		margin: 0;
-		font-size: 1.125rem;
+		font-size: 1.2rem;
 	}
 
 	.date {
-		margin: 0.25rem 0 1rem;
-		opacity: 0.6;
-		font-size: 0.875rem;
+		margin: 0.25rem 0 1.25rem;
+		color: var(--accent);
+		font-family: var(--mono);
+		font-size: 0.85rem;
 	}
 
 	ul {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
 		margin: 0 0 1.5rem;
-		padding-left: 1.25rem;
+		padding: 0;
+		list-style: none;
 	}
 
-	li + li {
-		margin-top: 0.5rem;
+	li {
+		padding: 0.7rem 0.9rem;
+		border: 1px solid var(--line);
+		border-left: 3px solid var(--accent);
+		border-radius: 11px;
+		background: var(--surface);
 	}
 
 	form button {
+		width: 100%;
+		min-height: 2.75rem;
+		border: 1px solid var(--accent);
+		border-radius: 11px;
+		background: var(--accent);
+		color: var(--accent-ink);
 		font: inherit;
-		padding: 0.5rem 1rem;
-		border: 1px solid var(--ink);
-		background: var(--paper);
-		color: var(--ink);
+		font-weight: 600;
+		cursor: pointer;
 	}
 </style>

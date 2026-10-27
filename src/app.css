@@ -1,33 +1,47 @@
 /*
- * Two tokens, one pair of values each, resolved by the browser rather than by
- * a pre-paint script: no JS, no flash, and no CSP carve-out for an inline
- * <script> — which is what listula and kalendes both need a `theme.js` for.
+ * visus is dark, always. A headset's browser is used in a dim room with the
+ * eyes adjusted to it, a 3D model reads best against a dark frame, and one
+ * theme designed properly beats two done by halves. So there is no
+ * `prefers-color-scheme` branch and no pre-paint theme script: the tokens
+ * below are the only values, resolved before first paint, with no flash.
  *
- * Written as a `prefers-color-scheme` media query rather than with
- * `light-dark()`, which is the shorter way to say the same thing. That was
- * the first version of this file and it broke this project's own rule:
- * `light-dark()` is Baseline *Newly* available and does not reach Baseline
- * Widely available until 2026-11-13, and its failure mode on an engine
- * without it is the bad one — the whole declaration is invalid at
- * computed-value time, so `color: var(--ink)` resolves to nothing and a
- * dark-scheme browser paints black on black. A media query has been
- * everywhere for a decade. Revisit after that date; see TECHNICAL.md
- * § Theming and docs/LEARNINGS.md § Browsers.
- *
- * `color-scheme` stays: it is what makes form controls, scrollbars and the
- * canvas itself follow the theme, and it is long since Widely available.
+ * Plain hex and rgba on purpose — not `light-dark()` or `color-mix()`, which
+ * this project's rule on Baseline *Widely* available rules out (see
+ * TECHNICAL.md § Theming), and whose failure mode on an older engine is an
+ * unreadable page. The same values are mirrored for the headset's panels in
+ * src/lib/viewer/theme.ts; change one, change both.
  */
 :root {
-	color-scheme: light dark;
-	--ink: #000;
-	--paper: #fff;
-}
+	color-scheme: dark;
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--ink: #fff;
-		--paper: #000;
-	}
+	--bg: #07090c;
+	--panel: #0d1117;
+	--surface: #131a22;
+	--surface-hover: #1a232e;
+	--line: #1f2833;
+	--line-strong: #2d3a48;
+
+	--text: #e8eef5;
+	--text-dim: #9aa8b8;
+	--text-faint: #7f8d9e;
+
+	/* One accent for anything that can be acted on; amber for notes, wherever
+	   they appear — pins in the model, their list, their labels. */
+	--accent: #4ee6c8;
+	--accent-ink: #03130f;
+	--accent-soft: rgba(78, 230, 200, 0.12);
+	--accent-line: rgba(78, 230, 200, 0.45);
+	--note: #ffb547;
+	--note-soft: rgba(255, 181, 71, 0.14);
+	--danger: #ff7a7a;
+	--danger-soft: rgba(255, 107, 107, 0.12);
+
+	--radius: 16px;
+	--radius-sm: 11px;
+	--control: 2.75rem;
+
+	--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+	--mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
 
 /* A minimal, deliberate reset — not a framework. */
@@ -37,16 +51,43 @@
 	box-sizing: border-box;
 }
 
+html {
+	/* Larger than the browser's 16px: this is read at arm's length in a
+	   headset as often as on a desk. */
+	font-size: 112.5%;
+	-webkit-text-size-adjust: 100%;
+}
+
 body {
 	margin: 0;
 	min-height: 100svh;
-	background: var(--paper);
-	color: var(--ink);
-	font-family:
-		system-ui,
-		-apple-system,
-		'Segoe UI',
-		sans-serif;
+	background:
+		radial-gradient(70rem 36rem at 12% -12%, rgba(78, 230, 200, 0.07), transparent 60%),
+		radial-gradient(60rem 30rem at 100% 0%, rgba(120, 140, 255, 0.05), transparent 55%), var(--bg);
+	background-color: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: var(--accent-soft);
+	color: var(--text);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+code {
+	font-family: var(--mono);
+	font-size: 0.9em;
+	padding: 0.05em 0.35em;
+	border-radius: 6px;
+	background: var(--surface);
+	border: 1px solid var(--line);
 }
 
 /*

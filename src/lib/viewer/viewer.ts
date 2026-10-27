@@ -45,6 +45,7 @@ import {
 	yawOf
 } from './rig';
 import type { ViewTarget } from './views';
+import { hex } from './theme';
 
 /**
  * What the viewer asks of the page. The viewer draws and handles input; the
@@ -131,9 +132,9 @@ export class Viewer {
 	private readonly hands: Hand[] = [];
 	private readonly arc: Line;
 	private readonly marker: Mesh;
-	private readonly menu = new Panel(1024, 660, 0.5);
-	private readonly keyboard = new Panel(1024, 640, 0.62);
-	private readonly toast = new Panel(1024, 110, 0.36);
+	private readonly menu = new Panel(1024, 800, 0.52);
+	private readonly keyboard = new Panel(1024, 684, 0.62);
+	private readonly toast = new Panel(1024, 120, 0.36);
 	private grid: GridHelper | null = null;
 
 	private model: Object3D | null = null;
@@ -175,7 +176,7 @@ export class Viewer {
 		canvas.tabIndex = 0;
 		container.append(canvas);
 
-		this.scene.background = new Color(0xdde2e5);
+		this.scene.background = new Color(hex.sky);
 		const pmrem = new PMREMGenerator(renderer);
 		this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 		this.scene.environmentIntensity = 0.5;
@@ -200,13 +201,13 @@ export class Viewer {
 				'position',
 				new Float32BufferAttribute(new Float32Array(3 * 64), 3)
 			),
-			new LineBasicMaterial({ color: 0x2fbf71 })
+			new LineBasicMaterial({ color: hex.accent })
 		);
 		this.arc.frustumCulled = false;
 		this.arc.visible = false;
 		this.marker = new Mesh(
 			new RingGeometry(0.18, 0.24, 32).rotateX(-Math.PI / 2),
-			new MeshBasicMaterial({ color: 0x2fbf71, depthTest: false })
+			new MeshBasicMaterial({ color: hex.accent, depthTest: false })
 		);
 		this.marker.renderOrder = 6;
 		this.marker.visible = false;
@@ -266,7 +267,7 @@ export class Viewer {
 		const span = Math.max(size.x, size.z) * 1.6 + 10;
 		const cell = span > 300 ? 10 : 1;
 		const cells = Math.min(400, Math.ceil(span / cell));
-		this.grid = new GridHelper(cells * cell, cells, 0x9aa1a5, 0xc3c8cb);
+		this.grid = new GridHelper(cells * cell, cells, hex.gridMajor, hex.gridMinor);
 		this.grid.position.set(center.x, this.bounds.min.y - 0.002, center.z);
 		this.world.add(this.grid);
 
@@ -502,7 +503,7 @@ export class Viewer {
 		const ray = this.renderer.xr.getController(index);
 		const line = new Line(
 			new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -1)]),
-			new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })
+			new LineBasicMaterial({ color: hex.ray, transparent: true, opacity: 0.6 })
 		);
 		line.visible = false;
 		ray.add(line);
@@ -512,7 +513,7 @@ export class Viewer {
 		const grip = this.renderer.xr.getControllerGrip(index);
 		const handle = new Mesh(
 			new BoxGeometry(0.03, 0.03, 0.11),
-			new MeshBasicMaterial({ color: 0x2b2b28 })
+			new MeshBasicMaterial({ color: hex.grip })
 		);
 		handle.position.z = 0.02;
 		grip.add(handle);
@@ -725,7 +726,7 @@ export class Viewer {
 		positions.needsUpdate = true;
 		this.arc.geometry.setDrawRange(0, count);
 		this.arc.visible = true;
-		const colour = target ? 0x2fbf71 : 0xd94a3d;
+		const colour = target ? hex.accent : hex.danger;
 		(this.arc.material as LineBasicMaterial).color.setHex(colour);
 		(this.marker.material as MeshBasicMaterial).color.setHex(colour);
 		const at = target?.point ?? invalidAt;
@@ -936,51 +937,89 @@ export class Viewer {
 		this.placePanel(this.menu, 0.6, 0.2);
 	}
 
+	/*
+	 * The menu, top to bottom: what's open and at what scale, then three
+	 * labelled sections of equal-height rows, then the two ways out side by
+	 * side. Each row splits the width evenly, so the panel is symmetrical
+	 * whatever a row holds.
+	 */
 	private drawMenu() {
 		const s = this.world.scale.x;
 		const view = this.views[this.viewIndex];
-		const pad = 24;
+		const pad = 40;
 		const gap = 16;
+		const h = 100;
 		const row = (y: number, items: Omit<Control, 'x' | 'y' | 'w' | 'h'>[]): Control[] => {
 			const w = (1024 - 2 * pad - gap * (items.length - 1)) / items.length;
-			return items.map((item, i) => ({ ...item, x: pad + i * (w + gap), y, w, h: 96 }));
+			return items.map((item, i) => ({ ...item, x: pad + i * (w + gap), y, w, h }));
 		};
+		const section = (text: string, y: number) => ({
+			text,
+			x: pad,
+			y,
+			size: 22,
+			weight: 700,
+			tone: 'accent' as const
+		});
 		const noViews = this.views.length === 0;
+		const shown = this.markers.group.visible;
 
 		this.menu.set(
 			[
-				...row(150, [
-					{ id: 'prev', label: '◀  View', disabled: noViews },
-					{ id: 'next', label: 'View  ▶', disabled: noViews },
-					{ id: 'save-view', label: 'Save view' }
+				...row(196, [
+					{ id: 'prev', label: '◀  Previous', disabled: noViews },
+					{ id: 'save-view', label: 'Save view' },
+					{ id: 'next', label: 'Next  ▶', disabled: noViews }
 				]),
-				...row(270, [
+				...row(356, [
 					{ id: 'fit', label: 'Fit' },
 					{ id: 'scale:1', label: '1:1', active: s === 1 },
 					...MENU_SCALES.map((m) => ({ id: `scale:${m}`, label: scaleLabel(m), active: s === m }))
 				]),
-				...row(390, [
-					{ id: 'add-note', label: 'Add note', active: this.armedNote },
-					{ id: 'notes', label: 'Notes shown', active: this.markers.group.visible },
-					{ id: 'close', label: 'Close menu' }
+				...row(516, [
+					{
+						id: 'add-note',
+						label: this.armedNote ? 'Placing…' : 'Add note',
+						active: this.armedNote
+					},
+					{ id: 'notes', label: shown ? 'Hide notes' : 'Show notes' }
 				]),
-				...row(510, [{ id: 'exit', label: 'Exit VR' }])
+				...row(648, [
+					{ id: 'close', label: 'Close menu' },
+					{ id: 'exit', label: 'Exit VR', variant: 'danger' }
+				])
 			],
 			[
-				{ text: this.modelName || 'No model', x: pad, y: 52, size: 40 },
+				{ text: this.modelName || 'No model', x: pad, y: 64, size: 42, weight: 650 },
 				{
-					text: `${scaleLabel(s)}  ·  ${view ? view.name : `${this.views.length} views`}`,
-					x: pad,
-					y: 104,
-					size: 32,
-					dim: true
+					text: scaleLabel(s),
+					x: 1024 - pad,
+					y: 64,
+					size: 42,
+					weight: 600,
+					align: 'right',
+					mono: true,
+					tone: 'accent'
 				},
 				{
-					text: 'A/B views · X note · Y menu · sticks move, teleport, turn · grips grab & scale',
+					text: view
+						? `${view.name}  ·  ${this.viewIndex + 1} / ${this.views.length}`
+						: `${this.views.length} views`,
 					x: pad,
-					y: 636,
-					size: 25,
-					dim: true
+					y: 114,
+					size: 30,
+					tone: 'dim'
+				},
+				section('VIEWS', 174),
+				section('SCALE', 334),
+				section('NOTES', 494),
+				{
+					text: 'A B views   ·   X note   ·   Y menu   ·   grips grab and scale',
+					x: 512,
+					y: 772,
+					size: 24,
+					align: 'center',
+					tone: 'dim'
 				}
 			]
 		);
@@ -1062,9 +1101,24 @@ export class Viewer {
 		const e = this.editing;
 		if (!e) return;
 		const pad = 24;
-		const gap = 8;
+		const gap = 10;
 		const unit = (1024 - 2 * pad - 9 * gap) / 10;
 		const controls: Control[] = [];
+		if (!e.isNew) {
+			controls.push(
+				{ id: 'resolve', label: e.done ? 'Reopen' : 'Resolve', x: 600, y: 22, w: 190, h: 60 },
+				{ id: 'delete', label: 'Delete', x: 810, y: 22, w: 190, h: 60, variant: 'danger' }
+			);
+		}
+		controls.push({
+			id: 'field',
+			label: '',
+			x: pad,
+			y: 100,
+			w: 1024 - 2 * pad,
+			h: 92,
+			variant: 'field'
+		});
 		keyboardRows(e.shift).forEach((keys, r) => {
 			const width = keys.reduce((w, k) => w + k.span * unit + (k.span - 1) * gap, 0);
 			let x = (1024 - width - gap * (keys.length - 1)) / 2;
@@ -1074,23 +1128,25 @@ export class Viewer {
 					id: key.id,
 					label: key.label,
 					x,
-					y: 190 + r * 88,
+					y: 214 + r * 92,
 					w,
-					h: 80,
-					active: key.id === 'shift' && e.shift
+					h: 82,
+					active: key.id === 'shift' && e.shift,
+					variant: key.id === 'save' ? 'primary' : undefined
 				});
 				x += w + gap;
 			}
 		});
-		if (!e.isNew) {
-			controls.push(
-				{ id: 'resolve', label: e.done ? 'Reopen' : 'Resolve', x: 600, y: 24, w: 190, h: 64 },
-				{ id: 'delete', label: 'Delete', x: 810, y: 24, w: 190, h: 64 }
-			);
-		}
 		this.keyboard.set(controls, [
-			{ text: e.isNew ? 'New note' : 'Note', x: pad, y: 56, size: 32, dim: true },
-			{ text: (e.text || '') + '|', x: pad, y: 140, size: 40 }
+			{
+				text: e.isNew ? 'NEW NOTE' : 'NOTE',
+				x: pad + 8,
+				y: 54,
+				size: 24,
+				weight: 700,
+				tone: 'note'
+			},
+			{ text: (e.text || '') + '▏', x: pad + 28, y: 148, size: 42 }
 		]);
 	}
 
@@ -1100,7 +1156,7 @@ export class Viewer {
 		// texture upload, so it happens only when the words change.
 		if (text === this.toastText && this.toast.mesh.visible) return;
 		this.toastText = text;
-		this.toast.set([], [{ text, x: 512, y: 56, size: 56, align: 'center' }]);
+		this.toast.set([], [{ text, x: 512, y: 62, size: 50, weight: 600, align: 'center' }]);
 		this.toast.mesh.visible = true;
 		if (this.menu.mesh.visible) this.drawMenu();
 	}

@@ -3,7 +3,8 @@ import { controlAt, type Control } from './panel';
 
 const controls: Control[] = [
 	{ id: 'a', label: 'A', x: 0, y: 0, w: 100, h: 50 },
-	{ id: 'b', label: 'B', x: 110, y: 0, w: 100, h: 50, disabled: true }
+	{ id: 'b', label: 'B', x: 110, y: 0, w: 100, h: 50, disabled: true },
+	{ id: 'f', label: '', x: 0, y: 60, w: 210, h: 50, variant: 'field' }
 ];
 
 describe('controlAt', () => {
@@ -12,8 +13,9 @@ describe('controlAt', () => {
 		expect(controlAt(controls, 100, 50)?.id).toBe('a');
 	});
 
-	it('misses in the gaps and on disabled controls', () => {
+	it('misses in the gaps, on disabled controls, and on text fields', () => {
 		expect(controlAt(controls, 105, 25)).toBeNull();
 		expect(controlAt(controls, 150, 25)).toBeNull();
+		expect(controlAt(controls, 100, 80)).toBeNull();
 	});
 });

@@ -137,32 +137,29 @@ switches to npm gets one — `package-lock.json` has it twice, at the root and
 under `packages[""]` — and should add it to the gate, regenerating with
 `npm install --package-lock-only` rather than by hand.
 
-## Theming, without a pre-paint script
+## Theming: dark, and only dark
 
-`src/app.css` defines `--ink`/`--paper` on `:root` and redefines the pair
-inside `@media (prefers-color-scheme: dark)`, with `color-scheme: light
-dark` alongside them. The browser resolves everything before first paint —
-no classic script racing the render, no flash, and no CSP carve-out for an
-inline `<script>`, which is what `listula` and `kalendes` both need a
-`static/theme.js` for.
+visus has one theme. `src/app.css` sets `color-scheme: dark` and a set of
+tokens on `:root` — surfaces, lines, text, one mint accent for anything
+that can be acted on, amber for notes — with no `prefers-color-scheme`
+branch. A headset browser is used in a dim room, a model reads best against
+a dark frame, and one theme designed properly beats two done by halves.
+With one set of values there's nothing to choose before first paint, so no
+theme script and no flash.
 
-**This was `light-dark()` first, and that was a bug.** `light-dark()` says
-the same thing in one line, and it is genuinely the better spelling — but
-it is Baseline _Newly_ available and does not reach Widely available until
-**2026-11-13**, which puts it on the wrong side of this project's own rule
-(§ Baseline browser support). The failure mode is the one that matters:
-`--ink: light-dark(#000, #fff)` on an engine without support is invalid at
-computed-value time, so the custom property never resolves, `color: var(--ink)`
-falls back to nothing, and a dark-scheme browser renders black on black. A
-media query has been everywhere for a decade and cannot fail that way.
-`e2e/theme.e2e.ts` now asserts the computed `color` and `background-color`
-in both schemes, so this is enforced rather than remembered. Revisit
-`light-dark()` after that date if the shorter form is worth the edit.
+The canvases drawn inside the headset (`src/lib/viewer/panel.ts`) can't read
+CSS custom properties, so `src/lib/viewer/theme.ts` repeats the same values
+— as strings for the 2D canvas, as numbers for three.js materials. Change
+one file, change the other.
 
-If this project ever needs a **user-chosen** theme that overrides the OS
-(not just follows it), that's the point to reach for the pattern the two
-sibling projects use — see their `CLAUDE.md` files for the reasoning — but
-don't add it pre-emptively.
+The tokens are plain hex and rgba. osseus first wrote its theme with
+`light-dark()`, which wasn't Baseline Widely available, and on an engine
+without it the custom properties never resolved and the page went black on
+black. `e2e/theme.e2e.ts` asserts the computed colours under both system
+schemes, so a token that stops resolving fails a test rather than shipping.
+If a light theme is ever wanted back, it is user-chosen (the system already
+said dark is fine), which means a small pre-paint script from `static/` —
+the pattern `listula` and `kalendes` use — not a media query.
 
 ## Baseline browser support
 

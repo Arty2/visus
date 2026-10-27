@@ -11,6 +11,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 - Controllers buzz to confirm a button, a teleport or a grab.
 - Models can be picked from the Quest's own file browser.
 - Saved views are renamed in place.
+- A new dark look with larger type, on the page and in the headset.
 
 ## 0.1.0 — 2026-10-27
 

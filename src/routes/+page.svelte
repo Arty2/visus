@@ -8,6 +8,7 @@
 	import type { Viewer } from '$lib/viewer/viewer';
 	import type { ViewTarget } from '$lib/viewer/views';
 	import WhatsNew from '$lib/WhatsNew.svelte';
+	import Icon from '$lib/Icon.svelte';
 
 	let container: HTMLDivElement | undefined = $state();
 	let modelInput: HTMLInputElement | undefined = $state();
@@ -28,6 +29,13 @@
 	let importError = $state('');
 	/** The saved view whose name is being edited in place, if any. */
 	let renaming: string | null = $state(null);
+	let help: HTMLDialogElement | undefined = $state();
+	const openNotes = $derived(notesStore.annotations.filter((a) => !a.done).length);
+
+	// Escape leaves note-placing mode — the way out a crosshair cursor implies.
+	function onKey(event: KeyboardEvent) {
+		if (event.key === 'Escape' && addMode) addMode = false;
+	}
 
 	const views: ViewTarget[] = $derived([
 		...fileViews,
@@ -210,78 +218,124 @@
 	<title>visus</title>
 </svelte:head>
 
-<main>
-	<header>
-		<h1>visus</h1>
-		<p class="lede">Walk through a 3D model in a Meta Quest, and leave notes in it.</p>
-	</header>
+<svelte:window onkeydown={onKey} />
 
-	<div class="toolbar">
-		<!-- No `accept` filter, on purpose: Android-based browsers, the Quest's
-		     among them, match it by MIME type, and .glb and .dae have none they
-		     recognise — the files show greyed out and can't be picked. What
-		     was picked is checked after (src/lib/viewer/files.ts). -->
-		<label class="button primary">
-			Open model…
-			<input
-				bind:this={modelInput}
-				type="file"
-				multiple
-				onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
-			/>
-		</label>
-		{#if recentName && recentName !== modelName}
-			<button type="button" onclick={reopen}>Reopen {recentName}</button>
-		{/if}
-		<button type="button" onclick={openSample} disabled={!viewer}>Sample</button>
-		<button
-			type="button"
-			class="vr"
-			onclick={enterVR}
-			disabled={!viewer || !xrSupported || inVR}
-			aria-describedby="vr-hint"
-		>
-			Enter VR
-		</button>
-	</div>
-	<p id="vr-hint" class="quiet small">
-		{#if xrSupported === false}
-			VR needs a headset: open this page in the Meta Quest Browser. Everything else works here.
-		{:else if inVR}
-			In VR — take the headset off any time; the page keeps your notes in step.
-		{:else}
-			Open a <code>.glb</code>, <code>.gltf</code> or <code>.dae</code> — pick its textures with it.
-		{/if}
-	</p>
-
-	{#if loading}<p class="notice" role="status">Opening…</p>{/if}
-	{#if loadError}<p class="notice" role="alert">{loadError}</p>{/if}
-	{#if xrError}<p class="notice" role="alert">{xrError}</p>{/if}
-	{#if missing.length}
-		<p class="notice" role="status">
-			Shown without {missing.length === 1 ? 'a file' : `${missing.length} files`} it refers to — open
-			them together with the model: {missing.join(', ')}
-		</p>
-	{/if}
-
-	<div class="layout">
-		<div class="viewport" bind:this={container}>
-			{#if !viewer}<p class="quiet loading">Loading the viewer…</p>{/if}
+<div class="app">
+	<header class="topbar">
+		<div class="brand">
+			<span class="mark" aria-hidden="true"><Icon name="cube" size={22} /></span>
+			<div>
+				<h1>visus</h1>
+				<p class="tagline">Walk through a 3D model in a Meta Quest, and leave notes in it.</p>
+			</div>
 		</div>
 
-		<aside>
-			<h2 class="model-name">{modelName || 'No model'}</h2>
+		<div class="actions">
+			<!-- No `accept` filter, on purpose: Android-based browsers, the Quest's
+			     among them, match it by MIME type, and .glb and .dae have none they
+			     recognise — the files show greyed out and can't be picked. What
+			     was picked is checked after (src/lib/viewer/files.ts). -->
+			<label class="btn">
+				<Icon name="open" />
+				<span>Open model…</span>
+				<input
+					bind:this={modelInput}
+					type="file"
+					multiple
+					onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
+				/>
+			</label>
+			{#if recentName && recentName !== modelName}
+				<button type="button" class="btn" onclick={reopen}>
+					<Icon name="history" />
+					<span>Reopen {recentName}</span>
+				</button>
+			{/if}
+			<button type="button" class="btn" onclick={openSample} disabled={!viewer}>
+				<Icon name="cube" />
+				<span>Sample</span>
+			</button>
+			<button
+				type="button"
+				class="btn primary"
+				onclick={enterVR}
+				disabled={!viewer || !xrSupported || inVR}
+				aria-describedby="vr-hint"
+			>
+				<Icon name="headset" />
+				<span>Enter VR</span>
+			</button>
+		</div>
+	</header>
 
-			<section aria-labelledby="views-title">
-				<h3 id="views-title">Views</h3>
+	<main class="workspace">
+		<section class="stage" aria-label="Model">
+			<div class="viewport" class:placing={addMode} bind:this={container}>
+				{#if !viewer}<p class="loading">Loading the viewer…</p>{/if}
+			</div>
+
+			<div class="hud top">
+				<div class="chip">
+					<span class="dot" class:live={inVR}></span>
+					<span class="chip-title">{modelName || 'No model'}</span>
+					<span class="chip-meta">{views.length} views · {notesStore.annotations.length} notes</span
+					>
+				</div>
+				<p id="vr-hint" class="chip quiet">
+					{#if inVR}
+						In VR — take the headset off any time; notes stay in step.
+					{:else if xrSupported === false}
+						VR needs the Meta Quest Browser. Everything else works here.
+					{:else}
+						Ready for VR
+					{/if}
+				</p>
+			</div>
+
+			{#if addMode}
+				<p class="hud bottom chip note-chip" role="status">
+					<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
+				</p>
+			{:else if views[currentView]}
+				<p class="hud bottom chip">
+					<Icon name="camera" size={18} />
+					{views[currentView].name}
+					<span class="chip-meta">{currentView + 1} / {views.length}</span>
+				</p>
+			{/if}
+		</section>
+
+		<aside class="sidebar">
+			{#if loading || loadError || xrError || missing.length}
+				<div class="stack">
+					{#if loading}<p class="notice" role="status">Opening…</p>{/if}
+					{#if loadError}<p class="notice error" role="alert">{loadError}</p>{/if}
+					{#if xrError}<p class="notice error" role="alert">{xrError}</p>{/if}
+					{#if missing.length}
+						<p class="notice" role="status">
+							Shown without {missing.length === 1 ? 'a file' : `${missing.length} files`} it refers to
+							— open them together with the model: {missing.join(', ')}
+						</p>
+					{/if}
+				</div>
+			{/if}
+
+			<section class="card" aria-labelledby="views-title">
+				<header class="card-head">
+					<span class="card-icon"><Icon name="camera" /></span>
+					<h2 id="views-title">Views</h2>
+					<span class="count">{views.length}</span>
+				</header>
+
 				{#if views.length}
-					<ol class="views">
+					<ol class="list">
 						{#each views as view, i (view.id)}
-							<li class:current={i === currentView}>
+							<li class="row" class:current={i === currentView}>
+								<span class="index">{String(i + 1).padStart(2, '0')}</span>
 								{#if renaming === view.id}
 									<!-- svelte-ignore a11y_autofocus -->
 									<input
-										class="note-text"
+										class="field"
 										value={view.name}
 										aria-label={`New name for ${view.name}`}
 										autofocus
@@ -307,56 +361,71 @@
 										{view.name}
 									</button>
 								{/if}
-								{#if view.saved && renaming !== view.id}
+								{#if view.saved}
+									{#if renaming !== view.id}
+										<button
+											type="button"
+											class="icon-btn"
+											aria-label={`Rename ${view.name}`}
+											title="Rename"
+											onclick={() => (renaming = view.id)}><Icon name="pencil" size={18} /></button
+										>
+									{/if}
 									<button
 										type="button"
-										class="small-button"
-										aria-label={`Rename ${view.name}`}
-										onclick={() => (renaming = view.id)}>Rename</button
-									>
-									<button
-										type="button"
-										class="small-button"
+										class="icon-btn"
 										aria-label={`Delete ${view.name}`}
-										onclick={() => notesStore.removeViewpoint(view.id)}>×</button
+										title="Delete"
+										onclick={() => notesStore.removeViewpoint(view.id)}
+										><Icon name="trash" size={18} /></button
 									>
+								{:else}
+									<span class="tag">file</span>
 								{/if}
 							</li>
 						{/each}
 					</ol>
 				{:else}
-					<p class="quiet small">No cameras in this model yet.</p>
+					<p class="empty">No cameras in this model yet.</p>
 				{/if}
-				<button type="button" onclick={saveDesktopView} disabled={!viewer || !modelName}>
-					Save this view
-				</button>
+
+				<div class="card-foot">
+					<button
+						type="button"
+						class="btn wide"
+						onclick={saveDesktopView}
+						disabled={!viewer || !modelName}
+					>
+						<Icon name="bookmark" />
+						<span>Save this view</span>
+					</button>
+				</div>
 			</section>
 
-			<section aria-labelledby="notes-title">
-				<h3 id="notes-title">Notes</h3>
-				<button
-					type="button"
-					aria-pressed={addMode}
-					onclick={() => (addMode = !addMode)}
-					disabled={!viewer || !modelName}
-				>
-					{addMode ? 'Click the model to place it…' : 'Add note'}
-				</button>
+			<section class="card" aria-labelledby="notes-title">
+				<header class="card-head">
+					<span class="card-icon note"><Icon name="pin" /></span>
+					<h2 id="notes-title">Notes</h2>
+					<span class="count">{openNotes} open</span>
+				</header>
+
 				{#if noNotes}
-					<p class="quiet small">None yet. Add one here, or with X in VR.</p>
+					<p class="empty">None yet. Add one here, or with X in VR.</p>
 				{:else}
-					<ul class="notes">
+					<ul class="list">
 						{#each notesStore.annotations as note, i (note.id)}
-							<li>
+							<li class="row">
+								<span class="index note">{String(i + 1).padStart(2, '0')}</span>
 								<input
 									type="checkbox"
+									class="check"
 									checked={note.done}
 									aria-label={`Resolved: note ${i + 1}`}
 									onchange={() => notesStore.toggle(note.id)}
 								/>
 								<input
 									id={`note-${note.id}`}
-									class="note-text"
+									class="field note-text"
 									class:done={note.done}
 									value={note.text}
 									placeholder="Write a note…"
@@ -365,165 +434,266 @@
 								/>
 								<button
 									type="button"
-									class="small-button"
+									class="icon-btn"
 									aria-label={`Delete note ${i + 1}`}
-									onclick={() => notesStore.removeAnnotation(note.id)}>×</button
+									title="Delete"
+									onclick={() => notesStore.removeAnnotation(note.id)}
+									><Icon name="trash" size={18} /></button
 								>
 							</li>
 						{/each}
 					</ul>
 				{/if}
 
-				<div class="io">
-					<button type="button" onclick={exportMarkdown} disabled={noNotes}>Export Markdown</button>
+				<div class="card-foot">
 					<button
 						type="button"
-						onclick={exportJSON}
-						disabled={noNotes && !notesStore.viewpoints.length}>Export JSON</button
+						class="btn wide"
+						class:armed={addMode}
+						aria-pressed={addMode}
+						onclick={() => (addMode = !addMode)}
+						disabled={!viewer || !modelName}
 					>
-					<label class="button">
-						Import notes
-						<input
-							bind:this={notesInput}
-							type="file"
-							accept=".json,application/json,.md,.markdown,text/markdown"
-							onchange={importNotes}
-						/>
-					</label>
+						<Icon name="plus" />
+						<span>Add note</span>
+					</button>
+					<div class="trio">
+						<button type="button" class="btn small" onclick={exportMarkdown} disabled={noNotes}>
+							<Icon name="download" size={18} />
+							<span><span class="sr">Export </span>Markdown</span>
+						</button>
+						<button
+							type="button"
+							class="btn small"
+							onclick={exportJSON}
+							disabled={noNotes && !notesStore.viewpoints.length}
+						>
+							<Icon name="download" size={18} />
+							<span><span class="sr">Export </span>JSON</span>
+						</button>
+						<label class="btn small">
+							<Icon name="upload" size={18} />
+							<span>Import</span>
+							<input
+								bind:this={notesInput}
+								aria-label="Import notes"
+								type="file"
+								accept=".json,application/json,.md,.markdown,text/markdown"
+								onchange={importNotes}
+							/>
+						</label>
+					</div>
 				</div>
 			</section>
 
-			{#if notesStore.undoable}
-				<p class="notice" role="status">
-					{notesStore.undoable.label}
-					<button type="button" onclick={() => notesStore.undo()}>Undo</button>
-				</p>
-			{/if}
-			{#if importError}<p class="notice" role="alert">{importError}</p>{/if}
-			{#if notesStore.storageBroken}
-				<p class="notice" role="alert">
-					This browser refused to save. Your notes work in this tab but won't survive a reload —
-					export them to keep them.
-				</p>
+			{#if notesStore.undoable || importError || notesStore.storageBroken}
+				<div class="stack">
+					{#if notesStore.undoable}
+						<p class="notice" role="status">
+							<span>{notesStore.undoable.label}</span>
+							<button type="button" class="btn small" onclick={() => notesStore.undo()}>Undo</button
+							>
+						</p>
+					{/if}
+					{#if importError}<p class="notice error" role="alert">{importError}</p>{/if}
+					{#if notesStore.storageBroken}
+						<p class="notice error" role="alert">
+							This browser refused to save. Your notes work in this tab but won't survive a reload —
+							export them to keep them.
+						</p>
+					{/if}
+				</div>
 			{/if}
 		</aside>
+	</main>
+
+	<footer class="footbar">
+		<button type="button" class="link" onclick={() => help?.showModal()} aria-haspopup="dialog">
+			<Icon name="help" size={18} />
+			<span>Controls</span>
+		</button>
+		<WhatsNew />
+	</footer>
+</div>
+
+<dialog bind:this={help} class="help" aria-labelledby="help-title">
+	<header class="dialog-head">
+		<h2 id="help-title">Controls</h2>
+		<form method="dialog">
+			<button type="submit" class="icon-btn" aria-label="Close"><Icon name="close" /></button>
+		</form>
+	</header>
+	<div class="help-columns">
+		<section>
+			<h3><Icon name="headset" size={18} /> In VR, Touch controllers</h3>
+			<dl>
+				<dt><kbd>L</kbd> stick</dt>
+				<dd>Walk where you look</dd>
+				<dt><kbd>R</kbd> stick ↑, release</dt>
+				<dd>Teleport — onto the miniature to step into it at 1:1</dd>
+				<dt><kbd>R</kbd> stick ← →</dt>
+				<dd>Turn</dd>
+				<dt><kbd>A</kbd> <kbd>B</kbd></dt>
+				<dd>Next / previous view</dd>
+				<dt><kbd>X</kbd></dt>
+				<dd>Note where the right hand points</dd>
+				<dt><kbd>Y</kbd></dt>
+				<dd>Menu: scale, views, notes, exit</dd>
+				<dt>One grip</dt>
+				<dd>Grab the world and pull yourself along</dd>
+				<dt>Both grips</dt>
+				<dd>Scale and turn the model</dd>
+				<dt>Trigger</dt>
+				<dd>Press menu buttons, keys, or a note to edit it</dd>
+			</dl>
+		</section>
+		<section>
+			<h3><Icon name="cube" size={18} /> On a screen</h3>
+			<dl>
+				<dt>Drag</dt>
+				<dd>Orbit</dd>
+				<dt>Right-drag, <kbd>←</kbd><kbd>→</kbd></dt>
+				<dd>Pan</dd>
+				<dt>Scroll</dt>
+				<dd>Zoom</dd>
+				<dt>A view's name</dt>
+				<dd>Look from it</dd>
+				<dt>Add note</dt>
+				<dd>Then click the model; <kbd>Esc</kbd> cancels</dd>
+			</dl>
+		</section>
 	</div>
-
-	<details class="help">
-		<summary>Controls</summary>
-		<div class="help-columns">
-			<section>
-				<h3>In VR, Touch controllers</h3>
-				<dl>
-					<dt>Left stick</dt>
-					<dd>Walk where you look</dd>
-					<dt>Right stick forward, release</dt>
-					<dd>Teleport — onto the miniature to step into it at 1:1</dd>
-					<dt>Right stick left / right</dt>
-					<dd>Turn</dd>
-					<dt>A / B</dt>
-					<dd>Next / previous view</dd>
-					<dt>X</dt>
-					<dd>Note where the right hand points</dd>
-					<dt>Y</dt>
-					<dd>Menu: scale, views, notes, exit</dd>
-					<dt>One grip</dt>
-					<dd>Grab the world and pull yourself along</dd>
-					<dt>Both grips</dt>
-					<dd>Scale and turn the model</dd>
-					<dt>Trigger</dt>
-					<dd>Press menu buttons, keys, or a note to edit it</dd>
-				</dl>
-			</section>
-			<section>
-				<h3>On a screen</h3>
-				<dl>
-					<dt>Drag</dt>
-					<dd>Orbit</dd>
-					<dt>Right-drag, arrow keys</dt>
-					<dd>Pan</dd>
-					<dt>Scroll</dt>
-					<dd>Zoom</dd>
-					<dt>A view's name</dt>
-					<dd>Look from it</dd>
-				</dl>
-			</section>
-		</div>
-	</details>
-
-	<WhatsNew />
-</main>
+</dialog>
 
 <style>
-	main {
-		max-width: 80rem;
+	/* minmax(0, …) everywhere a track holds text: an `auto` track grows to
+	   its widest unbreakable line, and on a phone that's a sideways scroll. */
+	.app {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto 1fr auto;
+		min-height: 100svh;
+		max-width: 110rem;
 		margin: 0 auto;
-		padding: 1.5rem 1rem 2rem;
+		padding: 1rem clamp(1rem, 2.5vw, 2rem);
+		gap: 1rem;
 	}
 
-	header {
+	/* ── Top bar: brand on the left, actions on the right ─────────────── */
+
+	.topbar {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 0 1rem;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem 2rem;
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+	}
+
+	.mark {
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: 13px;
+		color: var(--accent-ink);
+		background: linear-gradient(135deg, #7cf5dc, var(--accent) 55%, #2bb79c);
+		box-shadow:
+			0 0 0 1px rgba(78, 230, 200, 0.4),
+			0 8px 28px rgba(78, 230, 200, 0.25);
 	}
 
 	h1 {
 		margin: 0;
+		font-size: 1.5rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		line-height: 1.1;
 	}
 
-	.lede {
-		margin: 0;
+	.tagline {
+		margin: 0.15rem 0 0;
+		color: var(--text-dim);
+		font-size: 0.9rem;
 	}
 
-	h2,
-	h3 {
-		margin: 0 0 0.5rem;
-		font-size: 1rem;
-	}
-
-	.model-name {
-		overflow-wrap: anywhere;
-		font-size: 1.125rem;
-	}
-
-	.toolbar {
+	.actions {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 1rem;
+		gap: 0.625rem;
 	}
 
-	button,
-	.button {
+	/* ── Buttons: one shape, three weights ─────────────────────────────── */
+
+	.btn {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		min-height: var(--control);
+		padding: 0 1.1rem;
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text);
 		font: inherit;
-		padding: 0.5rem 1rem;
-		border: 1px solid var(--ink);
-		background: var(--paper);
-		color: var(--ink);
+		font-size: 0.95rem;
+		font-weight: 550;
 		cursor: pointer;
+		white-space: nowrap;
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			box-shadow 120ms ease;
 	}
 
-	.primary,
-	.vr:not(:disabled) {
-		background: var(--ink);
-		color: var(--paper);
+	.btn:hover:not(:disabled) {
+		background: var(--surface-hover);
+		border-color: #3b4a5b;
 	}
 
-	button:disabled {
+	.btn.primary {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: var(--accent-ink);
+		box-shadow: 0 6px 24px rgba(78, 230, 200, 0.22);
+	}
+
+	.btn.primary:hover:not(:disabled) {
+		background: #6ff0d6;
+		border-color: #6ff0d6;
+	}
+
+	.btn:disabled {
 		opacity: 0.4;
 		cursor: default;
+		box-shadow: none;
 	}
 
-	button[aria-pressed='true'] {
-		background: var(--ink);
-		color: var(--paper);
+	.btn.small {
+		min-height: 2.5rem;
+		padding: 0 0.75rem;
+		font-size: 0.85rem;
 	}
 
-	/* Visually hidden, not display:none — still focusable, still fires change. */
-	.button input {
+	.btn.wide {
+		width: 100%;
+	}
+
+	.btn.armed {
+		background: var(--note-soft);
+		border-color: var(--note);
+		color: var(--note);
+	}
+
+	/* A file input is visually hidden, not display:none — it still takes
+	   focus and fires change for keyboard and screen-reader use. */
+	.btn input[type='file'] {
 		position: absolute;
 		width: 1px;
 		height: 1px;
@@ -531,28 +701,90 @@
 		clip-path: inset(100%);
 	}
 
-	.button:focus-within {
-		outline: 2px solid var(--ink);
+	.btn:focus-within {
+		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
 
-	.layout {
-		display: grid;
-		gap: 1rem;
-		margin-top: 1rem;
+	.icon-btn {
+		display: inline-grid;
+		place-items: center;
+		flex: none;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: 1px solid transparent;
+		border-radius: 9px;
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
 	}
 
-	@media (min-width: 60rem) {
-		.layout {
-			grid-template-columns: 1fr 22rem;
+	.icon-btn:hover {
+		background: var(--surface-hover);
+		border-color: var(--line-strong);
+		color: var(--text);
+	}
+
+	.link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0;
+		border: none;
+		background: none;
+		color: var(--text-dim);
+		font: inherit;
+		font-size: 0.9rem;
+		cursor: pointer;
+	}
+
+	.link:hover {
+		color: var(--text);
+	}
+
+	/* ── Workspace: the stage, and a sidebar of two matching cards ──────── */
+
+	.workspace {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+		min-height: 0;
+	}
+
+	@media (min-width: 64rem) {
+		.workspace {
+			grid-template-columns: minmax(0, 1fr) 25rem;
+			height: calc(100svh - 10.5rem);
+			min-height: 34rem;
+		}
+
+		.sidebar {
+			overflow-y: auto;
+			padding-right: 0.25rem;
+		}
+	}
+
+	.stage {
+		position: relative;
+		min-height: max(22rem, 62svh);
+		border: 1px solid var(--line);
+		border-radius: calc(var(--radius) + 4px);
+		overflow: hidden;
+		background: #161b22;
+		box-shadow:
+			inset 0 0 0 1px rgba(255, 255, 255, 0.02),
+			0 30px 80px rgba(0, 0, 0, 0.45);
+	}
+
+	@media (min-width: 64rem) {
+		.stage {
+			min-height: 0;
 		}
 	}
 
 	.viewport {
-		position: relative;
-		height: max(20rem, 65svh);
-		border: 1px solid var(--ink);
-		overflow: hidden;
+		position: absolute;
+		inset: 0;
 	}
 
 	/* The canvas is made by three.js, not by this component. */
@@ -563,73 +795,355 @@
 		touch-action: none;
 	}
 
-	.viewport :global(canvas.placing) {
+	.viewport.placing :global(canvas) {
 		cursor: crosshair;
 	}
 
 	.loading {
-		margin: 1rem;
+		margin: 1.25rem;
+		color: var(--text-dim);
 	}
 
-	aside section {
-		margin-bottom: 1.5rem;
+	/* Heads-up chips over the canvas: they don't take the pointer, so
+	   orbiting works right up to their edges. */
+	.hud {
+		position: absolute;
+		left: 1rem;
+		right: 1rem;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 0.5rem;
+		margin: 0;
+		pointer-events: none;
 	}
 
-	ol,
-	ul {
-		list-style: none;
-		margin: 0 0 0.75rem;
-		padding: 0;
+	.hud.top {
+		top: 1rem;
 	}
 
-	li {
+	.hud.bottom {
+		bottom: 1rem;
+		left: 50%;
+		right: auto;
+		transform: translateX(-50%);
+		white-space: nowrap;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin: 0;
+		padding: 0.5rem 0.9rem;
+		border: 1px solid var(--line-strong);
+		border-radius: 999px;
+		background: rgba(9, 12, 16, 0.82);
+		font-size: 0.875rem;
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	}
+
+	.chip.quiet {
+		color: var(--text-dim);
+	}
+
+	.chip-title {
+		font-weight: 600;
+		max-width: 22ch;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.chip-meta {
+		color: var(--text-dim);
+		font-family: var(--mono);
+		font-size: 0.8rem;
+	}
+
+	.note-chip {
+		border-color: var(--note);
+		color: var(--note);
+	}
+
+	.dot {
+		width: 0.55rem;
+		height: 0.55rem;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 10px var(--accent);
+	}
+
+	.dot.live {
+		background: var(--note);
+		box-shadow: 0 0 12px var(--note);
+	}
+
+	@media (prefers-reduced-motion: no-preference) {
+		.dot.live {
+			animation: pulse 1.6s ease-in-out infinite;
+		}
+	}
+
+	@keyframes pulse {
+		50% {
+			opacity: 0.35;
+		}
+	}
+
+	kbd {
+		display: inline-grid;
+		place-items: center;
+		min-width: 1.6em;
+		padding: 0 0.35em;
+		border: 1px solid var(--line-strong);
+		border-bottom-width: 2px;
+		border-radius: 6px;
+		background: var(--surface);
+		color: var(--text);
+		font-family: var(--mono);
+		font-size: 0.8em;
+		line-height: 1.5;
+	}
+
+	/* ── Cards ─────────────────────────────────────────────────────────── */
+
+	.sidebar {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		min-height: 0;
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+		padding: 1.1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 40%), var(--panel);
+	}
+
+	.card-head {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		border-bottom: 1px solid var(--ink);
-		padding-block: 0.25rem;
+		gap: 0.65rem;
+	}
+
+	.card-icon {
+		display: grid;
+		place-items: center;
+		width: 2.1rem;
+		height: 2.1rem;
+		border-radius: 10px;
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.card-icon.note {
+		background: var(--note-soft);
+		color: var(--note);
+	}
+
+	h2 {
+		flex: 1;
+		margin: 0;
+		font-size: 1.05rem;
+		font-weight: 650;
+		letter-spacing: 0.01em;
+	}
+
+	.count {
+		padding: 0.15rem 0.6rem;
+		border: 1px solid var(--line-strong);
+		border-radius: 999px;
+		color: var(--text-dim);
+		font-family: var(--mono);
+		font-size: 0.8rem;
+	}
+
+	.card-foot {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+	}
+
+	.trio {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.5rem;
+	}
+
+	.trio .btn {
+		flex-direction: column;
+		gap: 0.2rem;
+		min-height: 3.75rem;
+		padding: 0.4rem;
+		white-space: normal;
+		text-align: center;
+		line-height: 1.15;
+	}
+
+	/* Read aloud, not shown: the icon already says "export" on screen. */
+	.sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(100%);
+		white-space: nowrap;
+	}
+
+	.empty {
+		margin: 0;
+		padding: 1rem;
+		border: 1px dashed var(--line-strong);
+		border-radius: var(--radius-sm);
+		color: var(--text-dim);
+		font-size: 0.9rem;
+		text-align: center;
+	}
+
+	/* ── Rows: index, content, actions ─────────────────────────────────── */
+
+	.list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 3rem;
+		padding: 0.3rem 0.4rem 0.3rem 0.55rem;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+	}
+
+	.row:hover {
+		border-color: var(--line-strong);
+	}
+
+	.row.current {
+		border-color: var(--accent-line);
+		background: var(--accent-soft);
+	}
+
+	.index {
+		flex: none;
+		width: 1.9rem;
+		color: var(--accent);
+		font-family: var(--mono);
+		font-size: 0.8rem;
+		font-weight: 600;
+	}
+
+	.index.note {
+		color: var(--note);
 	}
 
 	.go {
 		flex: 1;
-		justify-content: flex-start;
+		min-width: 0;
+		min-height: 2.25rem;
+		padding: 0 0.25rem;
 		border: none;
-		padding-inline: 0.25rem;
+		background: none;
+		color: var(--text);
+		font: inherit;
+		font-size: 0.95rem;
 		text-align: left;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		cursor: pointer;
 	}
 
 	.current .go {
-		font-weight: 700;
+		color: var(--accent);
+		font-weight: 650;
 	}
 
-	.small-button {
-		padding: 0.125rem 0.5rem;
-		font-size: 0.875rem;
+	.tag {
+		flex: none;
+		padding: 0.1rem 0.5rem;
+		border-radius: 6px;
+		background: rgba(255, 255, 255, 0.05);
+		color: var(--text-dim);
+		font-family: var(--mono);
+		font-size: 0.72rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 
-	.note-text {
+	.field {
 		flex: 1;
 		min-width: 0;
-		font: inherit;
-		padding: 0.25rem;
+		min-height: 2.25rem;
+		padding: 0 0.5rem;
 		border: 1px solid transparent;
-		background: var(--paper);
-		color: var(--ink);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--text);
+		font: inherit;
+		font-size: 0.95rem;
 	}
 
-	.note-text:hover,
-	.note-text:focus {
-		border-color: var(--ink);
+	.field::placeholder {
+		color: var(--text-faint);
 	}
 
-	.done {
+	.field:hover {
+		border-color: var(--line-strong);
+	}
+
+	.field:focus {
+		outline: none;
+		border-color: var(--accent);
+		background: var(--bg);
+	}
+
+	.field.done {
+		color: var(--text-dim);
 		text-decoration: line-through;
-		opacity: 0.6;
 	}
 
-	.io {
+	/* A drawn checkbox, in the notes' amber. The tick is a data: SVG, which
+	   img-src already allows — it's a picture, not a script. */
+	.check {
+		appearance: none;
+		flex: none;
+		width: 1.25rem;
+		height: 1.25rem;
+		margin: 0;
+		border: 1.5px solid var(--line-strong);
+		border-radius: 6px;
+		background: var(--bg) center / 80% no-repeat;
+		cursor: pointer;
+	}
+
+	.check:hover {
+		border-color: var(--note);
+	}
+
+	.check:checked {
+		border-color: var(--note);
+		background-color: var(--note);
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2307090c' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+	}
+
+	/* ── Notices ───────────────────────────────────────────────────────── */
+
+	.stack {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
 		gap: 0.5rem;
 	}
 
@@ -637,38 +1151,66 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem;
-		margin: 0.75rem 0 0;
-		padding: 0.5rem 0.75rem;
-		border: 1px dashed var(--ink);
+		justify-content: space-between;
+		gap: 0.6rem;
+		margin: 0;
+		padding: 0.7rem 0.9rem;
+		border: 1px solid var(--accent-line);
+		border-left-width: 3px;
+		border-radius: var(--radius-sm);
+		background: var(--accent-soft);
+		font-size: 0.9rem;
+		overflow-wrap: anywhere;
 	}
 
-	.notice button {
-		padding: 0.25rem 0.75rem;
+	.notice.error {
+		border-color: rgba(255, 122, 122, 0.5);
+		background: var(--danger-soft);
 	}
 
-	.quiet {
-		opacity: 0.7;
+	/* ── Footer, and the controls dialog ───────────────────────────────── */
+
+	.footbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		color: var(--text-dim);
 	}
 
-	.small {
-		font-size: 0.875rem;
-		margin: 0.5rem 0;
+	.footbar :global(.credit) {
+		margin: 0;
 	}
 
 	.help {
-		margin-top: 1.5rem;
+		width: min(52rem, calc(100vw - 2rem));
+		max-height: calc(100svh - 2rem);
+		padding: 1.5rem;
+		border: 1px solid var(--line-strong);
+		border-radius: calc(var(--radius) + 4px);
+		background: var(--panel);
+		color: var(--text);
+		box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
 	}
 
-	summary {
-		cursor: pointer;
-		font-weight: 600;
+	.help::backdrop {
+		background: rgba(3, 5, 8, 0.7);
+	}
+
+	.dialog-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 1rem;
+	}
+
+	.dialog-head form {
+		margin: 0;
 	}
 
 	.help-columns {
 		display: grid;
 		gap: 1rem;
-		margin-top: 1rem;
 	}
 
 	@media (min-width: 48rem) {
@@ -677,18 +1219,40 @@
 		}
 	}
 
+	.help section {
+		padding: 1rem;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--surface);
+	}
+
+	h3 {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 0 0 0.75rem;
+		color: var(--accent);
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
 	dl {
 		display: grid;
 		grid-template-columns: max-content 1fr;
-		gap: 0.25rem 1rem;
+		gap: 0.55rem 1rem;
 		margin: 0;
+		font-size: 0.92rem;
 	}
 
 	dt {
 		font-weight: 600;
+		white-space: nowrap;
 	}
 
 	dd {
 		margin: 0;
+		color: var(--text-dim);
 	}
 </style>

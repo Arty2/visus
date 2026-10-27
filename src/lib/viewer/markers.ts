@@ -9,6 +9,7 @@ import {
 } from 'three';
 import type { Annotation } from '$lib/store/notes';
 import { disposeLabel, makeLabel } from './panel';
+import { hex } from './theme';
 
 // The notes, drawn into the model: a pin where each was left and a label
 // above it. They live inside the model's group so they move, turn and scale
@@ -16,8 +17,8 @@ import { disposeLabel, makeLabel } from './panel';
 // is as readable on a 1:200 model on a table as standing next to it at 1:1.
 
 const PIN = new SphereGeometry(1, 16, 12);
-const OPEN = new MeshBasicMaterial({ color: 0xff6a13, depthTest: false });
-const DONE = new MeshBasicMaterial({ color: 0x8c8a84, depthTest: false });
+const OPEN = new MeshBasicMaterial({ color: hex.note, depthTest: false });
+const DONE = new MeshBasicMaterial({ color: hex.noteDone, depthTest: false });
 
 // Angular sizes, as a fraction of distance. A pin is about half a degree; a
 // label's height about two.
