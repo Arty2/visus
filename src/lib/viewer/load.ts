@@ -11,6 +11,7 @@ import { allowOwnBlobWorkers } from '$lib/trusted-types';
 import { modelKey } from '$lib/store/notes';
 import { extension, isImage, pickMain, resourceKey } from './files';
 import { camerasIn, type ViewTarget } from './views';
+import { count, hasCompressedTextures, optimise, shouldOptimise, type Counts } from './optimise';
 
 export interface LoadedModel {
 	root: Object3D;
@@ -20,6 +21,31 @@ export interface LoadedModel {
 	views: ViewTarget[];
 	/** Files the model asked for that weren't picked with it. */
 	missing: string[];
+	/** Meshes before and after, if the model was optimised (optimise.ts). */
+	optimised: { before: Counts; after: Counts } | null;
+	/** Why optimising failed, if it did — the model is then shown as it came. */
+	optimiseError: string | null;
+}
+
+export interface LoadOptions {
+	/** Optimise models with many meshes; see optimise.ts. */
+	optimise: boolean;
+}
+
+// Textures a COLLADA, FBX or OBJ file names load after parse() returns.
+// They must be in before the scene is exported for optimising, or the
+// optimised copy is untextured. Bounded, so one texture that never answers
+// can't hang the open.
+function settled(manager: LoadingManager) {
+	let started = false;
+	const done = new Promise<void>((resolve) => {
+		manager.onStart = () => (started = true);
+		manager.onLoad = () => resolve();
+	});
+	return () =>
+		started
+			? Promise.race([done, new Promise<void>((r) => setTimeout(r, 20_000))])
+			: Promise.resolve();
 }
 
 // One transparent pixel, handed back for a texture that wasn't picked: the
@@ -34,7 +60,11 @@ let live: string[] = [];
  * `renderer` is needed only to ask which compressed texture formats the GPU
  * takes, so KTX2 textures are transcoded to one it can use.
  */
-export async function loadFiles(files: File[], renderer: WebGLRenderer): Promise<LoadedModel> {
+export async function loadFiles(
+	files: File[],
+	renderer: WebGLRenderer,
+	options: LoadOptions = { optimise: true }
+): Promise<LoadedModel> {
 	const main = pickMain(files);
 	if (!main) {
 		const skp = files.some((f) => extension(f.name) === 'skp');
@@ -71,6 +101,7 @@ export async function loadFiles(files: File[], renderer: WebGLRenderer): Promise
 	});
 
 	const { file, format } = main;
+	const texturesIn = settled(manager);
 	let root: Object3D;
 
 	if (format === 'dae') {
@@ -87,8 +118,25 @@ export async function loadFiles(files: File[], renderer: WebGLRenderer): Promise
 	} else {
 		root = await parseGLTF(file, format, manager, renderer);
 	}
+	await texturesIn();
+	let optimised: LoadedModel['optimised'] = null;
+	let optimiseError: string | null = null;
+	const before = count(root);
+	if (options.optimise && shouldOptimise(before, hasCompressedTextures(root))) {
+		try {
+			root = await optimise(root);
+			optimised = { before, after: count(root) };
+		} catch (err) {
+			// The model as it came is still a model: show it, and say why it
+			// wasn't made faster.
+			optimiseError = err instanceof Error ? err.message : String(err);
+		}
+	}
+
 	return {
 		root,
+		optimised,
+		optimiseError,
 		name: file.name,
 		key: modelKey(file.name, file.size),
 		views: camerasIn(root),

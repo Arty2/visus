@@ -29,6 +29,14 @@ Compressed glTF — Draco or Meshopt geometry, KTX2 textures — opens too.
 | Blender   | **File → Export → glTF 2.0**, format _glTF Binary (.glb)_, with _Cameras_ ticked.                          |
 | Elsewhere | glTF 2.0, FBX, COLLADA 1.4 or OBJ. Units are read from the file where it has them; OBJ is taken as metres. |
 
+**Large models are optimised as they open.** A model made of many separate
+meshes — every SketchUp export with furniture in it — is merged by material,
+and repeated components (chairs, windows, trees) are drawn as one instanced
+mesh, which is what keeps a Quest at full frame rate. Positions, cameras and
+notes are unchanged; COLLADA's simpler materials come back as standard ones,
+close but not identical. The page says what it did, and **Optimise large
+models**, at the foot of the page, turns it off.
+
 `.skp` files can't be read directly — SketchUp's own format isn't open. The
 last model opened is remembered, so after a reload **Reopen** brings it back
 without the file picker. **Sample** opens a small pavilion to try things on.

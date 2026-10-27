@@ -362,14 +362,24 @@ osseus starts with none and asks that each be a decision. visus decided, in
 indexes, XR input, schema checks — are better taken than hand-rolled. Each
 one, and what it replaced:
 
-| Library           | Does                                                         | Replaced                                     |
-| ----------------- | ------------------------------------------------------------ | -------------------------------------------- |
-| `three`           | Scene, renderer, WebXR session, glTF/COLLADA loaders         | —                                            |
-| `camera-controls` | Desktop orbit, pan, zoom-to-cursor, animated fly-to          | three's `OrbitControls`; jumps between views |
-| `valibot`         | Schemas for notes, views and imported files; types from them | Hand-written type guards                     |
-| `idb-keyval`      | IndexedDB for the last model opened                          | Hand-written request plumbing                |
-| three's loaders   | FBX, OBJ + MTL; Draco, Meshopt and KTX2 decoders             | Refusing those files                         |
-| `three-mesh-bvh`  | Spatial index on every mesh; fast raycasts and walking       | Testing every triangle, every frame          |
+| Library             | Does                                                                             | Replaced                                     |
+| ------------------- | -------------------------------------------------------------------------------- | -------------------------------------------- |
+| `three`             | Scene, renderer, WebXR session, glTF/COLLADA loaders                             | —                                            |
+| `camera-controls`   | Desktop orbit, pan, zoom-to-cursor, animated fly-to                              | three's `OrbitControls`; jumps between views |
+| `valibot`           | Schemas for notes, views and imported files; types from them                     | Hand-written type guards                     |
+| `idb-keyval`        | IndexedDB for the last model opened                                              | Hand-written request plumbing                |
+| three's loaders     | FBX, OBJ + MTL; Draco, Meshopt and KTX2 decoders                                 | Refusing those files                         |
+| `three-mesh-bvh`    | Spatial index on every mesh; fast raycasts and walking                           | Testing every triangle, every frame          |
+| `@gltf-transform/*` | Optimising many-mesh models on open: dedup, instance, flatten, join, weld, prune | Drawing every exported mesh separately       |
+
+**glTF-Transform without its pixel tools.** Its functions package imports
+`ndarray-pixels` and `ndarray-lanczos` for texture work, and `ndarray-ops`
+under them compiles code with `new Function` as soon as it's imported — which
+the CSP refuses, so the whole loader failed to load. `vite.config.ts`
+aliases all three to `src/lib/viewer/no-pixels.ts`, which throws if called;
+`optimise.ts` uses none of them and tells `prune` to keep solid textures,
+its one route to pixels. `e2e/models.e2e.ts` runs the optimiser under the
+real policy, so a change that reaches for them fails a test.
 
 One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
 to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two

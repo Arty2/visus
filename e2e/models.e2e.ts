@@ -46,6 +46,29 @@ test('an OBJ opens with the materials its .mtl names, and lists the missing text
 	expect(errors).toEqual([]);
 });
 
+// Sixty identical blocks, each its own mesh: dedup finds one, instance draws
+// it once. The camera has to survive the round trip, and nothing may log an
+// error — GLTFExporter, glTF-Transform and GLTFLoader all run here.
+test('a model with many meshes is optimised, cameras kept', async ({ page }) => {
+	const errors = collectErrors(page);
+	await ready(page);
+	await page.getByLabel('Open model…').setInputFiles(fixture('blocks.glb'));
+	await expectModel(page, 'blocks.glb');
+	await expect(page.getByRole('status')).toContainText('Optimised for VR: 60 meshes drawn as 1.');
+	await expect(page.getByRole('button', { name: 'Overlook', exact: true })).toBeVisible();
+	expect(errors).toEqual([]);
+});
+
+test('optimising can be switched off, and stays off', async ({ page }) => {
+	await ready(page);
+	await page.getByRole('switch', { name: 'Optimise large models' }).uncheck();
+	await page.reload();
+	await expect(page.getByRole('switch', { name: 'Optimise large models' })).not.toBeChecked();
+	await page.getByLabel('Open model…').setInputFiles(fixture('blocks.glb'));
+	await expectModel(page, 'blocks.glb');
+	await expect(page.getByText('Optimised for VR')).toHaveCount(0);
+});
+
 test('a SketchUp-style COLLADA file opens, scene cameras named, missing texture listed', async ({
 	page
 }) => {

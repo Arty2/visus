@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-vercel';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -14,6 +15,16 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 export default defineConfig({
 	define: {
 		__VERSION__: JSON.stringify(version)
+	},
+	// glTF-Transform's texture tools pull in ndarray-ops, which evals code
+	// when imported — refused by the CSP. visus doesn't use those tools; see
+	// src/lib/viewer/no-pixels.ts.
+	resolve: {
+		alias: {
+			'ndarray-pixels': fileURLToPath(new URL('./src/lib/viewer/no-pixels.ts', import.meta.url)),
+			'ndarray-lanczos': fileURLToPath(new URL('./src/lib/viewer/no-pixels.ts', import.meta.url)),
+			ndarray: fileURLToPath(new URL('./src/lib/viewer/no-pixels.ts', import.meta.url))
+		}
 	},
 	plugins: [
 		sveltekit({

@@ -28,6 +28,20 @@
 	// By id, not index: deleting a saved view shifts the ones after it.
 	let currentViewId: string | null = $state(null);
 	let importError = $state('');
+	/** Whether to optimise many-mesh models on open (optimise.ts); remembered. */
+	let optimiseOn = $state(true);
+	/** What optimising did to the model just opened, in a sentence. */
+	let optimiseNote = $state('');
+	const OPTIMISE_KEY = 'visus:optimise';
+
+	function setOptimise(on: boolean) {
+		optimiseOn = on;
+		try {
+			localStorage.setItem(OPTIMISE_KEY, on ? 'on' : 'off');
+		} catch {
+			// A preference that won't stick is no reason to interrupt anyone.
+		}
+	}
 	/** The saved view whose name is being edited in place, if any. */
 	let renaming: string | null = $state(null);
 	let help: HTMLDialogElement | undefined = $state();
@@ -42,6 +56,7 @@
 		...fileViews,
 		...notesStore.viewpoints.map((v) => ({ ...v, pitch: 0, saved: true }))
 	]);
+	const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 	const noNotes = $derived(notesStore.annotations.length === 0);
 	const currentView = $derived(views.findIndex((v) => v.id === currentViewId));
 
@@ -57,6 +72,11 @@
 	});
 
 	onMount(() => {
+		try {
+			optimiseOn = localStorage.getItem(OPTIMISE_KEY) !== 'off';
+		} catch {
+			// Storage refused: the default stands.
+		}
 		let disposed = false;
 		let created: Viewer | null = null;
 
@@ -118,6 +138,7 @@
 		missingFiles: string[]
 	) {
 		viewer?.setModel(root, name);
+		optimiseNote = '';
 		fileViews = cameras;
 		modelName = name;
 		missing = missingFiles;
@@ -135,8 +156,14 @@
 				import('$lib/viewer/load'),
 				import('$lib/viewer/recent')
 			]);
-			const model = await loadFiles(files, viewer.gl);
+			const model = await loadFiles(files, viewer.gl, { optimise: optimiseOn });
 			show(model.root, model.name, model.key, model.views, model.missing);
+			const n = (x: number) => x.toLocaleString();
+			optimiseNote = model.optimised
+				? `Optimised for VR: ${n(model.optimised.before.meshes)} meshes drawn as ${n(model.optimised.after.meshes)}.`
+				: model.optimiseError
+					? `Shown as exported — optimising failed (${model.optimiseError}).`
+					: '';
 			if (remember) {
 				await rememberFiles(files);
 				recentName = model.name;
@@ -287,7 +314,8 @@
 				<div class="chip">
 					<span class="dot" class:live={inVR}></span>
 					<span class="chip-title">{modelName || 'No model'}</span>
-					<span class="chip-meta">{views.length} views · {notesStore.annotations.length} notes</span
+					<span class="chip-meta"
+						>{plural(views.length, 'view')} · {plural(notesStore.annotations.length, 'note')}</span
 					>
 				</div>
 				<p id="vr-hint" class="chip quiet">
@@ -315,9 +343,10 @@
 		</section>
 
 		<aside class="sidebar">
-			{#if loading || loadError || xrError || missing.length}
+			{#if loading || loadError || xrError || missing.length || optimiseNote}
 				<div class="stack">
 					{#if loading}<p class="notice" role="status">Opening…</p>{/if}
+					{#if optimiseNote}<p class="notice" role="status">{optimiseNote}</p>{/if}
 					{#if loadError}<p class="notice error" role="alert">{loadError}</p>{/if}
 					{#if xrError}<p class="notice error" role="alert">{xrError}</p>{/if}
 					{#if missing.length}
@@ -521,6 +550,15 @@
 			<Icon name="help" size={18} />
 			<span>Controls</span>
 		</button>
+		<label class="switch">
+			<input
+				type="checkbox"
+				role="switch"
+				checked={optimiseOn}
+				onchange={(e) => setOptimise(e.currentTarget.checked)}
+			/>
+			<span>Optimise large models</span>
+		</label>
 		<WhatsNew />
 	</footer>
 </div>
@@ -1186,6 +1224,36 @@
 		justify-content: space-between;
 		gap: 1rem;
 		color: var(--text-dim);
+	}
+
+	/* A drawn switch: the track is the input itself, the knob its gradient. */
+	.switch {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-right: auto;
+		margin-left: 1.5rem;
+		color: var(--text-dim);
+		font-size: 0.9rem;
+		cursor: pointer;
+	}
+
+	.switch input {
+		appearance: none;
+		width: 2.4rem;
+		height: 1.35rem;
+		margin: 0;
+		border: 1px solid var(--line-strong);
+		border-radius: 999px;
+		background: radial-gradient(circle at 0.65rem 50%, var(--text-dim) 0.45rem, transparent 0.5rem)
+			var(--surface);
+		cursor: pointer;
+	}
+
+	.switch input:checked {
+		border-color: var(--accent);
+		background: radial-gradient(circle at 1.7rem 50%, var(--accent-ink) 0.45rem, transparent 0.5rem)
+			var(--accent);
 	}
 
 	.footbar :global(.credit) {

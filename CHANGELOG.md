@@ -10,6 +10,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 - Controllers buzz to confirm a button, a teleport or a grab.
 - Walking at life size follows floors and stairs, and stops at walls.
+- Large models are optimised as they open, so they run smoothly in the headset.
 - Opens FBX, OBJ and compressed glTF, and picks from the Quest's own file browser.
 - Saved views are renamed in place.
 - A new dark look with larger type, on the page and in the headset.
