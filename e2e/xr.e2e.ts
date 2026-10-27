@@ -176,7 +176,11 @@ test('walking is carried up onto the plinth and stopped by the wall', async ({ p
 	await expect(page.locator('[aria-current="true"]')).toHaveText('Bench');
 
 	await page.evaluate(`__xr.controllers.left.updateAxes('thumbstick', 0, 1)`);
-	await page.waitForTimeout(5000);
+	// Five seconds of walking, in frames as well as on the clock: the viewer
+	// caps a frame's step at 0.1 s, so under a loaded run, frames slower than
+	// that walk less than the clock says, and the test fell short of −2.7.
+	// The wall stops anything longer.
+	await Promise.all([page.waitForTimeout(5000), frames(page, 50)]);
 	await page.evaluate(`__xr.controllers.left.updateAxes('thumbstick', 0, 0)`);
 	await frames(page);
 

@@ -10,7 +10,7 @@ to a release, six at the very most. Plain text and `code` spans only.
 
 - Walking at life size follows floors and stairs; controllers buzz to confirm.
 - Large models are optimised as they open, so they run smoothly in the headset.
-- Opens FBX, OBJ, PLY, compressed glTF and Gaussian splat scans, from the Quest's own file browser.
+- Opens FBX, OBJ, PLY, compressed glTF and Gaussian splat scans, and installs as an app that works offline.
 - Sketch over the model — pen, lines, arrows, rectangles, ellipses — on screen or in the air.
 - Importing merges a colleague's notes with yours, and `Ctrl+Z` steps back through every change.
 - A new look in IBM Plex and Carbon icons, and a choice of white, studio, sky or night behind the model.

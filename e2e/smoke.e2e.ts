@@ -60,7 +60,9 @@ test('Escape leaves note-placing mode', async ({ page }) => {
 	const add = page.getByRole('button', { name: 'Add note' });
 	await add.click();
 	await expect(add).toHaveAttribute('aria-pressed', 'true');
-	await expect(page.getByRole('status')).toContainText('Click the model to place a note');
+	await expect(
+		page.getByRole('status').filter({ hasText: 'Click the model to place a note' })
+	).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(add).toHaveAttribute('aria-pressed', 'false');
 });
@@ -73,7 +75,7 @@ test('resolving and deleting a note, and undo putting it back', async ({ page })
 
 	await page.getByRole('button', { name: 'Delete note 1' }).click();
 	await expect(page.locator('.note-text')).toHaveCount(0);
-	await expect(page.getByRole('status')).toContainText('Deleted “temporary”');
+	await expect(page.getByRole('status').filter({ hasText: 'Deleted “temporary”' })).toBeVisible();
 	await page.getByRole('button', { name: 'Undo' }).click();
 	await expect(page.locator('.note-text')).toHaveValue('temporary');
 
@@ -185,7 +187,7 @@ test('an import merges with the notes already here, and is undoable', async ({ p
 	});
 	await expect(page.locator('.note-text')).toHaveCount(2);
 	await expect(page.locator('.note-text').nth(1)).toHaveValue('something else entirely');
-	await expect(page.getByRole('status')).toContainText('Merged in “other.md”');
+	await expect(page.getByRole('status').filter({ hasText: 'Merged in “other.md”' })).toBeVisible();
 
 	await page.getByRole('button', { name: 'Undo' }).click();
 	await expect(page.locator('.note-text')).toHaveCount(1);
@@ -223,7 +225,7 @@ test('re-importing a Markdown export does not double the notes', async ({ page }
 		page.getByRole('button', { name: 'Export Markdown' }).click()
 	]);
 	await page.getByLabel('Import notes').setInputFiles((await download.path())!);
-	await expect(page.getByRole('status')).toContainText('Merged in');
+	await expect(page.getByRole('status').filter({ hasText: 'Merged in' })).toBeVisible();
 	await expect(page.locator('.note-text')).toHaveCount(1);
 });
 

@@ -406,6 +406,19 @@ markup strings, and sets `xmlns` explicitly: without it, an icon created in
 the browser rather than prerendered gets HTML-namespaced `<path>`s that
 draw nothing. `e2e/smoke.e2e.ts` checks every path on the page is SVG.
 
+**Offline, without a plugin.** visus installs as an app and opens offline
+through SvelteKit's own service worker (`src/service-worker.ts`), not
+`vite-plugin-pwa`: SvelteKit registers its worker through the
+`sveltekit-trusted-url` policy the CSP already allows, where the plugin's
+registration script would need its own Trusted Types policy or a hash. The
+worker precaches the build, `static/` and the prerendered page under a
+cache named for the build version, serves those cache-first (they can't
+change until the next deploy, which brings a new cache and drops the old),
+and sends anything else to the network with the cache behind it. The
+manifest is `static/manifest.webmanifest`; its PNG icons are rendered from
+`static/favicon.svg` by `node scripts/icons.mjs`. `e2e/pwa.e2e.ts` checks
+the manifest and its icons, and reloads offline.
+
 One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
 to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two
 copies means two sets of classes that fail each other's `instanceof`.

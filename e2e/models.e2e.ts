@@ -42,7 +42,7 @@ test('an OBJ opens with the materials its .mtl names, and lists the missing text
 	await ready(page);
 	await page.getByLabel('Open model…').setInputFiles([fixture('floor.obj'), fixture('floor.mtl')]);
 	await expectModel(page, 'floor.obj');
-	await expect(page.getByRole('status')).toContainText('tile.jpg');
+	await expect(page.getByRole('status').filter({ hasText: 'tile.jpg' })).toBeVisible();
 	expect(errors).toEqual([]);
 });
 
@@ -99,7 +99,7 @@ test('a SketchUp-style COLLADA file opens, scene cameras named, missing texture 
 	await page.getByLabel('Open model…').setInputFiles(fixture('floor.dae'));
 	await expectModel(page, 'floor.dae');
 	await expect(page.getByRole('button', { name: 'Front Door', exact: true })).toBeVisible();
-	await expect(page.getByRole('status')).toContainText('tile.jpg');
+	await expect(page.getByRole('status').filter({ hasText: 'tile.jpg' })).toBeVisible();
 	// ColladaLoader warns about Z-up on purpose; warnings aren't errors.
 	expect(errors).toEqual([]);
 });

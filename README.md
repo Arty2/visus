@@ -5,8 +5,8 @@ an object exported from SketchUp, Blender or anything else that writes glTF
 or COLLADA, put the headset on, and walk through it at full size — or shrink
 it to a model on a table and look down on it. Jump between the cameras
 saved in the file, save views of your own, and pin notes to the places that
-need attention. It runs in the Quest's own browser; nothing to install, and
-the model never leaves the device.
+need attention. It runs in the Quest's own browser — or install it as an app,
+which then opens offline — and the model never leaves the device.
 
 - **Source** — [github.com/arty2/visus](https://github.com/arty2/visus)
 
@@ -162,11 +162,20 @@ since. Where you both edited the same note, the later edit wins. A Markdown
 file adds its notes, skipping any identical to one already here. An import
 with nothing in it is refused, and any import can be undone.
 
+## Installing
+
+Nothing needs installing, but the browser can keep visus as an app: in
+the Quest Browser, open its menu and choose **Install app** (in Chrome or
+Edge on a computer, the install icon in the address bar). It then has its
+own icon in the app library and opens without a connection — once a new
+version is out, the next visit online picks it up.
+
 ## What leaves this machine
 
 Nothing. Models are read from the files you pick, in the browser; notes,
 views and the last model opened stay in this browser's storage. The page
-makes no requests beyond loading itself.
+makes no requests beyond loading itself, which it keeps a copy of to open
+offline.
 
 ## Limitations
 
