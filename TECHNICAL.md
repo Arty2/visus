@@ -355,6 +355,24 @@ means in practice:
   `gates.jsonl` (CI runners are ephemeral; the log never survives past one
   run there) and only visible if someone writes them down.
 
+## Dependencies
+
+osseus starts with none and asks that each be a decision. visus decided, in
+0.2.0, that the parts other people have already tested — loaders, spatial
+indexes, XR input, schema checks — are better taken than hand-rolled. Each
+one, and what it replaced:
+
+| Library           | Does                                                         | Replaced                                     |
+| ----------------- | ------------------------------------------------------------ | -------------------------------------------- |
+| `three`           | Scene, renderer, WebXR session, glTF/COLLADA loaders         | —                                            |
+| `camera-controls` | Desktop orbit, pan, zoom-to-cursor, animated fly-to          | three's `OrbitControls`; jumps between views |
+| `valibot`         | Schemas for notes, views and imported files; types from them | Hand-written type guards                     |
+| `idb-keyval`      | IndexedDB for the last model opened                          | Hand-written request plumbing                |
+
+One three.js only: `pnpm-workspace.yaml` overrides every dependency's copy
+to ours, because `@pmndrs/xr`'s emulator UI pins an older one, and two
+copies means two sets of classes that fail each other's `instanceof`.
+
 ## The viewer
 
 **three.js is the one runtime dependency, on purpose.** WebXR hands an app a

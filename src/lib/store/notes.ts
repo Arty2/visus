@@ -1,3 +1,5 @@
+import * as v from 'valibot';
+
 // What a review of one model leaves behind: notes pinned to points on it, and
 // viewpoints saved inside it. Nothing here knows about storage, three.js or
 // the DOM — that's notes.svelte.ts and src/lib/viewer — so the rules about
@@ -8,24 +10,33 @@
 // walked through in VR, and a note has to stay on the stair it was left on
 // through all of that.
 
-export type Vec3 = [number, number, number];
+// The shapes are Valibot schemas, and the types are read off them, so the
+// check and the type can't drift apart. A schema also says *what* was wrong
+// with a file (see io/json.ts), where a hand-written guard could only say no.
+const finite = v.pipe(v.number(), v.finite());
 
-export interface Annotation {
-	id: string;
-	text: string;
+export const Vec3Schema = v.tuple([finite, finite, finite]);
+
+export const AnnotationSchema = v.object({
+	id: v.string(),
+	text: v.string(),
 	/** Resolved — the `- [x]` of the Markdown export. */
-	done: boolean;
-	position: Vec3;
-}
+	done: v.boolean(),
+	position: Vec3Schema
+});
 
-export interface Viewpoint {
-	id: string;
-	name: string;
+export const ViewpointSchema = v.object({
+	id: v.string(),
+	name: v.string(),
 	/** Where the eyes are. */
-	position: Vec3;
+	position: Vec3Schema,
 	/** Which way they face, radians about +Y; 0 looks down −Z. */
-	yaw: number;
-}
+	yaw: finite
+});
+
+export type Vec3 = v.InferOutput<typeof Vec3Schema>;
+export type Annotation = v.InferOutput<typeof AnnotationSchema>;
+export type Viewpoint = v.InferOutput<typeof ViewpointSchema>;
 
 export interface ModelNotes {
 	annotations: Annotation[];
@@ -83,12 +94,8 @@ export function migrate(raw: unknown): ModelNotes {
 
 	if (persisted.version === SCHEMA_VERSION) {
 		return {
-			annotations: uniqueIds(
-				Array.isArray(persisted.annotations) ? persisted.annotations.filter(isAnnotation) : []
-			),
-			viewpoints: uniqueIds(
-				Array.isArray(persisted.viewpoints) ? persisted.viewpoints.filter(isViewpoint) : []
-			)
+			annotations: uniqueIds(valid(AnnotationSchema, persisted.annotations)),
+			viewpoints: uniqueIds(valid(ViewpointSchema, persisted.viewpoints))
 		};
 	}
 
@@ -113,30 +120,15 @@ export function uniqueIds<T extends { id: string }>(items: T[]): T[] {
 	});
 }
 
-export function isVec3(value: unknown): value is Vec3 {
-	return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+/** The items of a list that pass a schema — parsed, so unknown keys are dropped. */
+function valid<S extends v.GenericSchema>(schema: S, list: unknown): v.InferOutput<S>[] {
+	if (!Array.isArray(list)) return [];
+	return list.flatMap((item) => {
+		const result = v.safeParse(schema, item);
+		return result.success ? [result.output] : [];
+	});
 }
 
-export function isAnnotation(value: unknown): value is Annotation {
-	const a = value as Annotation;
-	return (
-		!!a &&
-		typeof a === 'object' &&
-		typeof a.id === 'string' &&
-		typeof a.text === 'string' &&
-		typeof a.done === 'boolean' &&
-		isVec3(a.position)
-	);
-}
-
-export function isViewpoint(value: unknown): value is Viewpoint {
-	const v = value as Viewpoint;
-	return (
-		!!v &&
-		typeof v === 'object' &&
-		typeof v.id === 'string' &&
-		typeof v.name === 'string' &&
-		isVec3(v.position) &&
-		Number.isFinite(v.yaw)
-	);
-}
+export const isVec3 = (value: unknown): value is Vec3 => v.is(Vec3Schema, value);
+export const isAnnotation = (value: unknown): value is Annotation => v.is(AnnotationSchema, value);
+export const isViewpoint = (value: unknown): value is Viewpoint => v.is(ViewpointSchema, value);

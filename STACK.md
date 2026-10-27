@@ -8,7 +8,7 @@ rewrites this file and TECHNICAL.md, and leaves AGENTS.md alone.
 ## The stack
 
 SvelteKit 2 with Svelte 5 runes, TypeScript strict, Vite, pnpm. three.js
-is the one runtime dependency (TECHNICAL.md § The viewer says why). Vitest for
+and tested libraries around it (TECHNICAL.md § Dependencies lists each). Vitest for
 pure logic, Playwright for the browser. GitHub Actions decides whether a
 change may land; Vercel's free tier builds and deploys it through
 `@sveltejs/adapter-vercel`, and nothing deploys from Actions.

@@ -18,6 +18,12 @@ describe('toJSON / fromJSON', () => {
 		expect(() => fromJSON('not json')).toThrow(/not valid JSON/);
 	});
 
+	it('says where a file went wrong', () => {
+		expect(() =>
+			fromJSON('{"annotations":[{"id":"a","text":"t","done":false,"position":[0,"x",0]}]}')
+		).toThrow('(at annotations.0.position.1)');
+	});
+
 	it('rejects JSON that is not a set of notes', () => {
 		expect(() => fromJSON('null')).toThrow(/not a recognised set of notes/);
 		expect(() => fromJSON('{"annotations":[{"foo":1}]}')).toThrow(/not a recognised/);

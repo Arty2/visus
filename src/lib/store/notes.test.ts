@@ -38,6 +38,19 @@ describe('uniqueIds', () => {
 	});
 });
 
+describe('migrate, on what it keeps', () => {
+	it('drops keys it does not know, so stored data stays the shape it says', () => {
+		const a = { ...newAnnotation('x', [0, 0, 0]), colour: 'red' };
+		const [kept] = migrate({ version: SCHEMA_VERSION, annotations: [a] }).annotations;
+		expect(kept).not.toHaveProperty('colour');
+	});
+
+	it('refuses infinite positions', () => {
+		const a = { ...newAnnotation('x', [0, 0, 0]), position: [0, Infinity, 0] };
+		expect(migrate({ version: SCHEMA_VERSION, annotations: [a] }).annotations).toEqual([]);
+	});
+});
+
 describe('new notes', () => {
 	it('round positions to the millimetre and fold negative zero', () => {
 		const note = newAnnotation('x', [1.23456, -0.00001, 2]);

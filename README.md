@@ -75,8 +75,9 @@ need the controllers.
 
 ## On a screen
 
-The same page works without a headset. Drag to orbit, right-drag or the
-arrow keys to pan, scroll to zoom. Click a view's name to look from it, and
+The same page works without a headset. Drag or the arrow keys to orbit,
+right-drag or shift and the arrows to pan, scroll or `+` and `−` to zoom
+toward the pointer. Click a view's name to fly to it, and
 **Save this view** to keep the current one; saved views can be renamed or
 deleted in the list. **Add note**, then click the model, places a note (Esc
 cancels); type in the list beside it. **Controls**, at the foot of the page,

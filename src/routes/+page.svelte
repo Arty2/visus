@@ -555,14 +555,14 @@
 		<section>
 			<h3><Icon name="cube" size={18} /> On a screen</h3>
 			<dl>
-				<dt>Drag</dt>
+				<dt>Drag, <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></dt>
 				<dd>Orbit</dd>
-				<dt>Right-drag, <kbd>←</kbd><kbd>→</kbd></dt>
+				<dt>Right-drag, <kbd>⇧</kbd> + arrows</dt>
 				<dd>Pan</dd>
-				<dt>Scroll</dt>
-				<dd>Zoom</dd>
+				<dt>Scroll, <kbd>+</kbd><kbd>−</kbd></dt>
+				<dd>Zoom, toward the pointer</dd>
 				<dt>A view's name</dt>
-				<dd>Look from it</dd>
+				<dd>Fly to it</dd>
 				<dt>Add note</dt>
 				<dd>Then click the model; <kbd>Esc</kbd> cancels</dd>
 			</dl>

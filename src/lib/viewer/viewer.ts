@@ -1,6 +1,9 @@
 import {
 	ACESFilmicToneMapping,
 	Box3,
+	Sphere,
+	Spherical,
+	Vector4,
 	BoxGeometry,
 	BufferGeometry,
 	Color,
@@ -28,7 +31,7 @@ import {
 	type Object3D,
 	type Texture
 } from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import CameraControls from 'camera-controls';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { Annotation, Vec3 } from '$lib/store/notes';
 import { autoShift, keyboardRows, pressKey } from './keyboard';
@@ -65,7 +68,15 @@ export interface ViewerHooks {
 	sessionChanged(active: boolean): void;
 }
 
+// camera-controls takes the three.js classes it needs rather than importing
+// three itself, so it can never end up holding a second copy of them.
+CameraControls.install({
+	THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster }
+});
+
 const UP = new Vector3(0, 1, 0);
+/** Animated moves on a screen — unless the person has asked for less motion. */
+const animate = () => !matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SNAP_TURN = Math.PI / 6;
 /** Walking pace with the stick fully over, metres per second of the room. */
 const MOVE_SPEED = 2;
@@ -125,7 +136,7 @@ export class Viewer {
 	private readonly dolly = new Group();
 	/** The model's frame: scaled and placed for the overview, identity at 1:1. */
 	private readonly world = new Group();
-	private readonly controls: OrbitControls;
+	private readonly controls: CameraControls;
 	private readonly markers = new Markers();
 	private readonly raycaster = new Raycaster();
 	private readonly resizeObserver: ResizeObserver;
@@ -192,9 +203,14 @@ export class Viewer {
 		this.scene.add(this.dolly, this.world);
 		this.world.add(this.markers.group);
 
-		this.controls = new OrbitControls(this.camera, canvas);
-		this.controls.enableDamping = true;
-		this.controls.listenToKeyEvents(canvas);
+		// camera-controls rather than three's OrbitControls: eased, animated
+		// moves between views instead of jumps, zoom toward the cursor (the
+		// way architecture is looked at — at a corner, not the middle), and
+		// better trackpad and touch handling.
+		this.controls = new CameraControls(this.camera, canvas);
+		this.controls.dollyToCursor = true;
+		this.controls.smoothTime = 0.35;
+		canvas.addEventListener('keydown', (e) => this.desktopKey(e));
 
 		this.arc = new Line(
 			new BufferGeometry().setAttribute(
@@ -280,10 +296,10 @@ export class Viewer {
 			this.overview();
 		} else {
 			// The desktop view starts outside the model, three-quarters on.
-			const direction = new Vector3(0.9, 0.6, 1).normalize();
-			this.camera.position.copy(center).addScaledVector(direction, extent * 1.4);
-			this.controls.target.copy(center);
-			this.controls.update();
+			const eye = center
+				.clone()
+				.addScaledVector(new Vector3(0.9, 0.6, 1).normalize(), extent * 1.4);
+			void this.controls.setLookAt(eye.x, eye.y, eye.z, center.x, center.y, center.z, false);
 		}
 	}
 
@@ -342,10 +358,9 @@ export class Viewer {
 		const eye = new Vector3(...view.position);
 		const look = forwardOf(view.yaw)
 			.multiplyScalar(Math.cos(view.pitch))
-			.setY(Math.sin(view.pitch));
-		this.camera.position.copy(eye);
-		this.controls.target.copy(eye).add(look);
-		this.controls.update();
+			.setY(Math.sin(view.pitch))
+			.add(eye);
+		void this.controls.setLookAt(eye.x, eye.y, eye.z, look.x, look.y, look.z, animate());
 	}
 
 	/** Where the desktop camera is, as a viewpoint worth saving. */
@@ -373,7 +388,7 @@ export class Viewer {
 		this.lastTime = time;
 
 		if (this.presenting) this.updateXR(dt, time);
-		else this.controls.update();
+		else this.controls.update(dt);
 
 		this.markers.resize(this.camera.getWorldPosition(new Vector3()), this.world.scale.x);
 		this.renderer.render(this.scene, this.camera);
@@ -410,13 +425,40 @@ export class Viewer {
 		}
 	}
 
+	/** Arrows orbit, shift-arrows pan, + and − zoom: the canvas is focusable. */
+	private desktopKey(e: KeyboardEvent) {
+		if (this.presenting) return;
+		const step = Math.PI / 24;
+		const pan = this.controls.distance * 0.05;
+		const smooth = animate();
+		const moves: Record<string, () => unknown> = e.shiftKey
+			? {
+					ArrowLeft: () => this.controls.truck(-pan, 0, smooth),
+					ArrowRight: () => this.controls.truck(pan, 0, smooth),
+					ArrowUp: () => this.controls.truck(0, -pan, smooth),
+					ArrowDown: () => this.controls.truck(0, pan, smooth)
+				}
+			: {
+					ArrowLeft: () => this.controls.rotate(step, 0, smooth),
+					ArrowRight: () => this.controls.rotate(-step, 0, smooth),
+					ArrowUp: () => this.controls.rotate(0, step, smooth),
+					ArrowDown: () => this.controls.rotate(0, -step, smooth)
+				};
+		moves['+'] = moves['='] = () => this.controls.dolly(this.controls.distance * 0.2, smooth);
+		moves['-'] = () => this.controls.dolly(-this.controls.distance * 0.2, smooth);
+		const move = moves[e.key];
+		if (!move) return;
+		e.preventDefault();
+		move();
+	}
+
 	// ── Entering and leaving VR ────────────────────────────────────────────
 
 	private sessionStarted() {
 		this.desktopPose = {
 			position: this.camera.position.clone(),
 			quaternion: this.camera.quaternion.clone(),
-			target: this.controls.target.clone()
+			target: this.controls.getTarget(new Vector3())
 		};
 		this.controls.enabled = false;
 		// Cleared so the first frame can tell the headset's pose has arrived:
@@ -442,10 +484,9 @@ export class Viewer {
 		this.dolly.rotation.set(0, 0, 0);
 		this.resetWorld();
 		if (this.desktopPose) {
-			this.camera.position.copy(this.desktopPose.position);
-			this.camera.quaternion.copy(this.desktopPose.quaternion);
+			const { position: p, target: t } = this.desktopPose;
 			this.camera.scale.set(1, 1, 1);
-			this.controls.target.copy(this.desktopPose.target);
+			void this.controls.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
 		}
 		this.controls.enabled = true;
 		this.resize();

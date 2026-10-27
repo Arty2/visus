@@ -2,6 +2,9 @@ import { expect, type Page } from '@playwright/test';
 
 /** The page with the viewer up and the sample open — its views listed. */
 export async function ready(page: Page) {
+	// Reduced motion makes camera moves instant, so a click straight after
+	// choosing a view lands on the view and not somewhere mid-flight.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto('/');
 	// Generous: in CI the canvas is drawn by a software renderer, and three.js
 	// arrives after the page itself.
