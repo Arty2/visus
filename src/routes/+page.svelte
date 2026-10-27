@@ -9,6 +9,8 @@
 	import type { ViewTarget } from '$lib/viewer/views';
 	import WhatsNew from '$lib/WhatsNew.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import Tip from '$lib/Tip.svelte';
+	import { Dialog, Switch, ToggleGroup, Tooltip } from 'bits-ui';
 	import { BACKDROP_ORDER, BACKDROPS, isBackdrop, type Backdrop } from '$lib/viewer/backdrop';
 
 	let container: HTMLDivElement | undefined = $state();
@@ -60,7 +62,7 @@
 	}
 	/** The saved view whose name is being edited in place, if any. */
 	let renaming: string | null = $state(null);
-	let help: HTMLDialogElement | undefined = $state();
+	let helpOpen = $state(false);
 	const openNotes = $derived(notesStore.annotations.filter((a) => !a.done).length);
 
 	// Escape leaves note-placing mode — the way out a crosshair cursor implies.
@@ -273,383 +275,419 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="app">
-	<header class="topbar">
-		<div class="brand">
-			<span class="mark" aria-hidden="true"><Icon name="cube" size={22} /></span>
-			<div>
-				<h1>visus</h1>
-				<p class="tagline">Walk through a 3D model in a Meta Quest, and leave notes in it.</p>
+<Tooltip.Provider>
+	<div class="app">
+		<header class="topbar">
+			<div class="brand">
+				<span class="mark" aria-hidden="true"><Icon name="cube" size={22} /></span>
+				<div>
+					<h1>visus</h1>
+					<p class="tagline">Walk through a 3D model in a Meta Quest, and leave notes in it.</p>
+				</div>
 			</div>
-		</div>
 
-		<div class="actions">
-			<!-- No `accept` filter, on purpose: Android-based browsers, the Quest's
+			<div class="actions">
+				<!-- No `accept` filter, on purpose: Android-based browsers, the Quest's
 			     among them, match it by MIME type, and .glb and .dae have none they
 			     recognise — the files show greyed out and can't be picked. What
 			     was picked is checked after (src/lib/viewer/files.ts). -->
-			<!-- Disabled until the viewer is up: a model opened sooner had nowhere
+				<!-- Disabled until the viewer is up: a model opened sooner had nowhere
 			     to go, and the sample loading next silently replaced it. -->
-			<label class="btn" class:disabled={!viewer}>
-				<Icon name="open" />
-				<span>Open model…</span>
-				<input
-					bind:this={modelInput}
-					type="file"
-					multiple
-					disabled={!viewer}
-					onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
-				/>
-			</label>
-			{#if recentName && recentName !== modelName}
-				<button type="button" class="btn" onclick={reopen}>
-					<Icon name="history" />
-					<span>Reopen {recentName}</span>
+				<label class="btn" class:disabled={!viewer}>
+					<Icon name="open" />
+					<span>Open model…</span>
+					<input
+						bind:this={modelInput}
+						type="file"
+						multiple
+						disabled={!viewer}
+						onchange={(e) => openFiles([...(e.currentTarget.files ?? [])], true)}
+					/>
+				</label>
+				{#if recentName && recentName !== modelName}
+					<button type="button" class="btn" onclick={reopen}>
+						<Icon name="history" />
+						<span>Reopen {recentName}</span>
+					</button>
+				{/if}
+				<button type="button" class="btn" onclick={openSample} disabled={!viewer}>
+					<Icon name="cube" />
+					<span>Sample</span>
 				</button>
-			{/if}
-			<button type="button" class="btn" onclick={openSample} disabled={!viewer}>
-				<Icon name="cube" />
-				<span>Sample</span>
-			</button>
-			<button
-				type="button"
-				class="btn primary"
-				onclick={enterVR}
-				disabled={!viewer || !xrSupported || inVR}
-				aria-describedby="vr-hint"
-			>
-				<Icon name="vr" />
-				<span>Enter VR</span>
-			</button>
-		</div>
-	</header>
-
-	<main class="workspace">
-		<section class="stage" aria-label="Model">
-			<div class="viewport" class:placing={addMode} bind:this={container}>
-				{#if !viewer}<p class="loading">Loading the viewer…</p>{/if}
+				<button
+					type="button"
+					class="btn primary"
+					onclick={enterVR}
+					disabled={!viewer || !xrSupported || inVR}
+					aria-describedby="vr-hint"
+				>
+					<Icon name="vr" />
+					<span>Enter VR</span>
+				</button>
 			</div>
+		</header>
 
-			<div class="hud top">
-				<div class="chip">
-					<span class="dot" class:live={inVR}></span>
-					<span class="chip-title">{modelName || 'No model'}</span>
-					<span class="chip-meta"
-						>{plural(views.length, 'view')} · {plural(notesStore.annotations.length, 'note')}</span
-					>
+		<main class="workspace">
+			<section class="stage" aria-label="Model">
+				<div class="viewport" class:placing={addMode} bind:this={container}>
+					{#if !viewer}<p class="loading">Loading the viewer…</p>{/if}
 				</div>
-				<p id="vr-hint" class="chip quiet">
-					{#if inVR}
-						In VR — take the headset off any time; notes stay in step.
-					{:else if xrSupported === false}
-						VR needs the Meta Quest Browser. Everything else works here.
-					{:else}
-						Ready for VR
-					{/if}
-				</p>
-			</div>
 
-			<div class="hud bottom">
-				{#if addMode}
-					<p class="chip note-chip" role="status">
-						<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
+				<div class="hud top">
+					<div class="chip">
+						<span class="dot" class:live={inVR}></span>
+						<span class="chip-title">{modelName || 'No model'}</span>
+						<span class="chip-meta"
+							>{plural(views.length, 'view')} · {plural(
+								notesStore.annotations.length,
+								'note'
+							)}</span
+						>
+					</div>
+					<p id="vr-hint" class="chip quiet">
+						{#if inVR}
+							In VR — take the headset off any time; notes stay in step.
+						{:else if xrSupported === false}
+							VR needs the Meta Quest Browser. Everything else works here.
+						{:else}
+							Ready for VR
+						{/if}
 					</p>
-				{:else if views[currentView]}
-					<p class="chip">
-						<Icon name="camera" size={18} />
-						{views[currentView].name}
-						<span class="chip-meta">{currentView + 1} / {views.length}</span>
-					</p>
-				{:else}
-					<span></span>
+				</div>
+
+				<div class="hud bottom">
+					{#if addMode}
+						<p class="chip note-chip" role="status">
+							<Icon name="pin" size={18} /> Click the model to place a note · <kbd>Esc</kbd> to cancel
+						</p>
+					{:else if views[currentView]}
+						<p class="chip">
+							<Icon name="camera" size={18} />
+							{views[currentView].name}
+							<span class="chip-meta">{currentView + 1} / {views.length}</span>
+						</p>
+					{:else}
+						<span></span>
+					{/if}
+
+					<ToggleGroup.Root
+						type="single"
+						class="backdrops"
+						aria-label="Background"
+						value={backdrop}
+						onValueChange={(kind) => {
+							// A single-choice group can be emptied by pressing the chosen
+							// item again; a background always has to be one of them.
+							if (isBackdrop(kind)) setBackdrop(kind);
+						}}
+					>
+						{#each BACKDROP_ORDER as kind (kind)}
+							<Tip label={BACKDROPS[kind].label}>
+								{#snippet children(props)}
+									<ToggleGroup.Item
+										{...props}
+										value={kind}
+										class="backdrop"
+										aria-label={`${BACKDROPS[kind].label} background`}
+									>
+										<Icon name={BACKDROPS[kind].icon} size={18} />
+									</ToggleGroup.Item>
+								{/snippet}
+							</Tip>
+						{/each}
+					</ToggleGroup.Root>
+				</div>
+			</section>
+
+			<aside class="sidebar">
+				{#if loading || loadError || xrError || missing.length || optimiseNote}
+					<div class="stack">
+						{#if loading}<p class="notice" role="status">Opening…</p>{/if}
+						{#if optimiseNote}<p class="notice" role="status">{optimiseNote}</p>{/if}
+						{#if loadError}<p class="notice error" role="alert">{loadError}</p>{/if}
+						{#if xrError}<p class="notice error" role="alert">{xrError}</p>{/if}
+						{#if missing.length}
+							<p class="notice" role="status">
+								Shown without {missing.length === 1 ? 'a file' : `${missing.length} files`} it refers
+								to — open them together with the model: {missing.join(', ')}
+							</p>
+						{/if}
+					</div>
 				{/if}
 
-				<div class="backdrops chip" role="group" aria-label="Background">
-					{#each BACKDROP_ORDER as kind (kind)}
-						<button
-							type="button"
-							class="backdrop"
-							aria-pressed={backdrop === kind}
-							aria-label={`${BACKDROPS[kind].label} background`}
-							title={BACKDROPS[kind].label}
-							onclick={() => setBackdrop(kind)}
-						>
-							<Icon name={BACKDROPS[kind].icon} size={18} />
-						</button>
-					{/each}
-				</div>
-			</div>
-		</section>
+				<section class="card" aria-labelledby="views-title">
+					<header class="card-head">
+						<span class="card-icon"><Icon name="camera" /></span>
+						<h2 id="views-title">Views</h2>
+						<span class="count">{views.length}</span>
+					</header>
 
-		<aside class="sidebar">
-			{#if loading || loadError || xrError || missing.length || optimiseNote}
-				<div class="stack">
-					{#if loading}<p class="notice" role="status">Opening…</p>{/if}
-					{#if optimiseNote}<p class="notice" role="status">{optimiseNote}</p>{/if}
-					{#if loadError}<p class="notice error" role="alert">{loadError}</p>{/if}
-					{#if xrError}<p class="notice error" role="alert">{xrError}</p>{/if}
-					{#if missing.length}
-						<p class="notice" role="status">
-							Shown without {missing.length === 1 ? 'a file' : `${missing.length} files`} it refers to
-							— open them together with the model: {missing.join(', ')}
-						</p>
-					{/if}
-				</div>
-			{/if}
-
-			<section class="card" aria-labelledby="views-title">
-				<header class="card-head">
-					<span class="card-icon"><Icon name="camera" /></span>
-					<h2 id="views-title">Views</h2>
-					<span class="count">{views.length}</span>
-				</header>
-
-				{#if views.length}
-					<ol class="list">
-						{#each views as view, i (view.id)}
-							<li class="row" class:current={i === currentView}>
-								<span class="index">{String(i + 1).padStart(2, '0')}</span>
-								{#if renaming === view.id}
-									<!-- svelte-ignore a11y_autofocus -->
-									<input
-										class="field"
-										value={view.name}
-										aria-label={`New name for ${view.name}`}
-										autofocus
-										onkeydown={(e) => {
-											if (e.key === 'Enter') e.currentTarget.blur();
-											if (e.key === 'Escape') {
-												e.currentTarget.value = view.name;
-												e.currentTarget.blur();
-											}
-										}}
-										onblur={(e) => {
-											notesStore.renameViewpoint(view.id, e.currentTarget.value);
-											renaming = null;
-										}}
-									/>
-								{:else}
-									<button
-										type="button"
-										class="go"
-										onclick={() => viewer?.goToView(i)}
-										aria-current={i === currentView ? 'true' : undefined}
-									>
-										{view.name}
-									</button>
-								{/if}
-								{#if view.saved}
-									{#if renaming !== view.id}
+					{#if views.length}
+						<ol class="list">
+							{#each views as view, i (view.id)}
+								<li class="row" class:current={i === currentView}>
+									<span class="index">{String(i + 1).padStart(2, '0')}</span>
+									{#if renaming === view.id}
+										<!-- svelte-ignore a11y_autofocus -->
+										<input
+											class="field"
+											value={view.name}
+											aria-label={`New name for ${view.name}`}
+											autofocus
+											onkeydown={(e) => {
+												if (e.key === 'Enter') e.currentTarget.blur();
+												if (e.key === 'Escape') {
+													e.currentTarget.value = view.name;
+													e.currentTarget.blur();
+												}
+											}}
+											onblur={(e) => {
+												notesStore.renameViewpoint(view.id, e.currentTarget.value);
+												renaming = null;
+											}}
+										/>
+									{:else}
 										<button
 											type="button"
-											class="icon-btn"
-											aria-label={`Rename ${view.name}`}
-											title="Rename"
-											onclick={() => (renaming = view.id)}><Icon name="pencil" size={18} /></button
+											class="go"
+											onclick={() => viewer?.goToView(i)}
+											aria-current={i === currentView ? 'true' : undefined}
 										>
+											{view.name}
+										</button>
 									{/if}
-									<button
-										type="button"
-										class="icon-btn"
-										aria-label={`Delete ${view.name}`}
-										title="Delete"
-										onclick={() => notesStore.removeViewpoint(view.id)}
-										><Icon name="trash" size={18} /></button
-									>
-								{:else}
-									<span class="tag">file</span>
-								{/if}
-							</li>
-						{/each}
-					</ol>
-				{:else}
-					<p class="empty">No cameras in this model yet.</p>
-				{/if}
+									{#if view.saved}
+										{#if renaming !== view.id}
+											<Tip label="Rename">
+												{#snippet children(props)}
+													<button
+														{...props}
+														type="button"
+														class="icon-btn"
+														aria-label={`Rename ${view.name}`}
+														onclick={() => (renaming = view.id)}
+														><Icon name="pencil" size={18} /></button
+													>
+												{/snippet}
+											</Tip>
+										{/if}
+										<Tip label="Delete">
+											{#snippet children(props)}
+												<button
+													{...props}
+													type="button"
+													class="icon-btn"
+													aria-label={`Delete ${view.name}`}
+													onclick={() => notesStore.removeViewpoint(view.id)}
+													><Icon name="trash" size={18} /></button
+												>
+											{/snippet}
+										</Tip>
+									{:else}
+										<span class="tag">file</span>
+									{/if}
+								</li>
+							{/each}
+						</ol>
+					{:else}
+						<p class="empty">No cameras in this model yet.</p>
+					{/if}
 
-				<div class="card-foot">
-					<button
-						type="button"
-						class="btn wide"
-						onclick={saveDesktopView}
-						disabled={!viewer || !modelName}
-					>
-						<Icon name="bookmark" />
-						<span>Save this view</span>
-					</button>
-				</div>
-			</section>
-
-			<section class="card" aria-labelledby="notes-title">
-				<header class="card-head">
-					<span class="card-icon note"><Icon name="pin" /></span>
-					<h2 id="notes-title">Notes</h2>
-					<span class="count">{openNotes} open</span>
-				</header>
-
-				{#if noNotes}
-					<p class="empty">None yet. Add one here, or with X in VR.</p>
-				{:else}
-					<ul class="list">
-						{#each notesStore.annotations as note, i (note.id)}
-							<li class="row">
-								<span class="index note">{String(i + 1).padStart(2, '0')}</span>
-								<input
-									type="checkbox"
-									class="check"
-									checked={note.done}
-									aria-label={`Resolved: note ${i + 1}`}
-									onchange={() => notesStore.toggle(note.id)}
-								/>
-								<input
-									id={`note-${note.id}`}
-									class="field note-text"
-									class:done={note.done}
-									value={note.text}
-									placeholder="Write a note…"
-									aria-label={`Note ${i + 1}`}
-									onchange={(e) => notesStore.setText(note.id, e.currentTarget.value.trim())}
-								/>
-								<button
-									type="button"
-									class="icon-btn"
-									aria-label={`Delete note ${i + 1}`}
-									title="Delete"
-									onclick={() => notesStore.removeAnnotation(note.id)}
-									><Icon name="trash" size={18} /></button
-								>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-
-				<div class="card-foot">
-					<button
-						type="button"
-						class="btn wide"
-						class:armed={addMode}
-						aria-pressed={addMode}
-						onclick={() => (addMode = !addMode)}
-						disabled={!viewer || !modelName}
-					>
-						<Icon name="plus" />
-						<span>Add note</span>
-					</button>
-					<div class="trio">
-						<button type="button" class="btn small" onclick={exportMarkdown} disabled={noNotes}>
-							<Icon name="download" size={18} />
-							<span><span class="sr">Export </span>Markdown</span>
-						</button>
+					<div class="card-foot">
 						<button
 							type="button"
-							class="btn small"
-							onclick={exportJSON}
-							disabled={noNotes && !notesStore.viewpoints.length}
+							class="btn wide"
+							onclick={saveDesktopView}
+							disabled={!viewer || !modelName}
 						>
-							<Icon name="download" size={18} />
-							<span><span class="sr">Export </span>JSON</span>
+							<Icon name="bookmark" />
+							<span>Save this view</span>
 						</button>
-						<label class="btn small">
-							<Icon name="upload" size={18} />
-							<span>Import</span>
-							<input
-								bind:this={notesInput}
-								aria-label="Import notes"
-								type="file"
-								accept=".json,application/json,.md,.markdown,text/markdown"
-								onchange={importNotes}
-							/>
-						</label>
 					</div>
-				</div>
-			</section>
+				</section>
 
-			{#if notesStore.undoable || importError || notesStore.storageBroken}
-				<div class="stack">
-					{#if notesStore.undoable}
-						<p class="notice" role="status">
-							<span>{notesStore.undoable.label}</span>
-							<button type="button" class="btn small" onclick={() => notesStore.undo()}>Undo</button
+				<section class="card" aria-labelledby="notes-title">
+					<header class="card-head">
+						<span class="card-icon note"><Icon name="pin" /></span>
+						<h2 id="notes-title">Notes</h2>
+						<span class="count">{openNotes} open</span>
+					</header>
+
+					{#if noNotes}
+						<p class="empty">None yet. Add one here, or with X in VR.</p>
+					{:else}
+						<ul class="list">
+							{#each notesStore.annotations as note, i (note.id)}
+								<li class="row">
+									<span class="index note">{String(i + 1).padStart(2, '0')}</span>
+									<input
+										type="checkbox"
+										class="check"
+										checked={note.done}
+										aria-label={`Resolved: note ${i + 1}`}
+										onchange={() => notesStore.toggle(note.id)}
+									/>
+									<input
+										id={`note-${note.id}`}
+										class="field note-text"
+										class:done={note.done}
+										value={note.text}
+										placeholder="Write a note…"
+										aria-label={`Note ${i + 1}`}
+										onchange={(e) => notesStore.setText(note.id, e.currentTarget.value.trim())}
+									/>
+									<Tip label="Delete">
+										{#snippet children(props)}
+											<button
+												{...props}
+												type="button"
+												class="icon-btn"
+												aria-label={`Delete note ${i + 1}`}
+												onclick={() => notesStore.removeAnnotation(note.id)}
+												><Icon name="trash" size={18} /></button
+											>
+										{/snippet}
+									</Tip>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+
+					<div class="card-foot">
+						<button
+							type="button"
+							class="btn wide"
+							class:armed={addMode}
+							aria-pressed={addMode}
+							onclick={() => (addMode = !addMode)}
+							disabled={!viewer || !modelName}
+						>
+							<Icon name="plus" />
+							<span>Add note</span>
+						</button>
+						<div class="trio">
+							<button type="button" class="btn small" onclick={exportMarkdown} disabled={noNotes}>
+								<Icon name="download" size={18} />
+								<span><span class="sr">Export </span>Markdown</span>
+							</button>
+							<button
+								type="button"
+								class="btn small"
+								onclick={exportJSON}
+								disabled={noNotes && !notesStore.viewpoints.length}
 							>
-						</p>
-					{/if}
-					{#if importError}<p class="notice error" role="alert">{importError}</p>{/if}
-					{#if notesStore.storageBroken}
-						<p class="notice error" role="alert">
-							This browser refused to save. Your notes work in this tab but won't survive a reload —
-							export them to keep them.
-						</p>
-					{/if}
-				</div>
-			{/if}
-		</aside>
-	</main>
+								<Icon name="download" size={18} />
+								<span><span class="sr">Export </span>JSON</span>
+							</button>
+							<label class="btn small">
+								<Icon name="upload" size={18} />
+								<span>Import</span>
+								<input
+									bind:this={notesInput}
+									aria-label="Import notes"
+									type="file"
+									accept=".json,application/json,.md,.markdown,text/markdown"
+									onchange={importNotes}
+								/>
+							</label>
+						</div>
+					</div>
+				</section>
 
-	<footer class="footbar">
-		<button type="button" class="link" onclick={() => help?.showModal()} aria-haspopup="dialog">
-			<Icon name="help" size={18} />
-			<span>Controls</span>
-		</button>
-		<label class="switch">
-			<input
-				type="checkbox"
-				role="switch"
-				checked={optimiseOn}
-				onchange={(e) => setOptimise(e.currentTarget.checked)}
-			/>
-			<span>Optimise large models</span>
-		</label>
-		<WhatsNew />
-	</footer>
-</div>
+				{#if notesStore.undoable || importError || notesStore.storageBroken}
+					<div class="stack">
+						{#if notesStore.undoable}
+							<p class="notice" role="status">
+								<span>{notesStore.undoable.label}</span>
+								<button type="button" class="btn small" onclick={() => notesStore.undo()}
+									>Undo</button
+								>
+							</p>
+						{/if}
+						{#if importError}<p class="notice error" role="alert">{importError}</p>{/if}
+						{#if notesStore.storageBroken}
+							<p class="notice error" role="alert">
+								This browser refused to save. Your notes work in this tab but won't survive a reload
+								— export them to keep them.
+							</p>
+						{/if}
+					</div>
+				{/if}
+			</aside>
+		</main>
 
-<dialog bind:this={help} class="help" aria-labelledby="help-title">
-	<header class="dialog-head">
-		<h2 id="help-title">Controls</h2>
-		<form method="dialog">
-			<button type="submit" class="icon-btn" aria-label="Close"><Icon name="close" /></button>
-		</form>
-	</header>
-	<div class="help-columns">
-		<section>
-			<h3><Icon name="vr" size={18} /> In VR, Touch controllers</h3>
-			<dl>
-				<dt><kbd>L</kbd> stick</dt>
-				<dd>Walk where you look</dd>
-				<dt><kbd>R</kbd> stick ↑, release</dt>
-				<dd>Teleport — onto the miniature to step into it at 1:1</dd>
-				<dt><kbd>R</kbd> stick ← →</dt>
-				<dd>Turn</dd>
-				<dt><kbd>A</kbd> <kbd>B</kbd></dt>
-				<dd>Next / previous view</dd>
-				<dt><kbd>X</kbd></dt>
-				<dd>Note where the right hand points</dd>
-				<dt><kbd>Y</kbd></dt>
-				<dd>Menu: scale, views, notes, exit</dd>
-				<dt>One grip</dt>
-				<dd>Grab the world and pull yourself along</dd>
-				<dt>Both grips</dt>
-				<dd>Scale and turn the model</dd>
-				<dt>Trigger</dt>
-				<dd>Press menu buttons, keys, or a note to edit it</dd>
-			</dl>
-		</section>
-		<section>
-			<h3><Icon name="cube" size={18} /> On a screen</h3>
-			<dl>
-				<dt>Drag, <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></dt>
-				<dd>Orbit</dd>
-				<dt>Right-drag, <kbd>⇧</kbd> + arrows</dt>
-				<dd>Pan</dd>
-				<dt>Scroll, <kbd>+</kbd><kbd>−</kbd></dt>
-				<dd>Zoom, toward the pointer</dd>
-				<dt>A view's name</dt>
-				<dd>Fly to it</dd>
-				<dt>Add note</dt>
-				<dd>Then click the model; <kbd>Esc</kbd> cancels</dd>
-			</dl>
-		</section>
+		<footer class="footbar">
+			<button type="button" class="link" onclick={() => (helpOpen = true)} aria-haspopup="dialog">
+				<Icon name="help" size={18} />
+				<span>Controls</span>
+			</button>
+			<span class="switch">
+				<Switch.Root
+					id="optimise"
+					class="switch-track"
+					checked={optimiseOn}
+					onCheckedChange={setOptimise}
+				>
+					<Switch.Thumb class="switch-thumb" />
+				</Switch.Root>
+				<label for="optimise">Optimise large models</label>
+			</span>
+			<WhatsNew />
+		</footer>
 	</div>
-</dialog>
+</Tooltip.Provider>
+
+<Dialog.Root bind:open={helpOpen}>
+	<Dialog.Portal>
+		<Dialog.Overlay class="overlay" />
+		<Dialog.Content class="dialog help">
+			<div class="dialog-head">
+				<Dialog.Title class="dialog-title">Controls</Dialog.Title>
+				<Dialog.Close class="icon-btn" aria-label="Close"><Icon name="close" /></Dialog.Close>
+			</div>
+			<div class="help-columns">
+				<section>
+					<h3><Icon name="vr" size={18} /> In VR, Touch controllers</h3>
+					<dl>
+						<dt><kbd>L</kbd> stick</dt>
+						<dd>Walk where you look</dd>
+						<dt><kbd>R</kbd> stick ↑, release</dt>
+						<dd>Teleport — onto the miniature to step into it at 1:1</dd>
+						<dt><kbd>R</kbd> stick ← →</dt>
+						<dd>Turn</dd>
+						<dt><kbd>A</kbd> <kbd>B</kbd></dt>
+						<dd>Next / previous view</dd>
+						<dt><kbd>X</kbd></dt>
+						<dd>Note where the right hand points</dd>
+						<dt><kbd>Y</kbd></dt>
+						<dd>Menu: scale, views, notes, exit</dd>
+						<dt>One grip</dt>
+						<dd>Grab the world and pull yourself along</dd>
+						<dt>Both grips</dt>
+						<dd>Scale and turn the model</dd>
+						<dt>Trigger</dt>
+						<dd>Press menu buttons, keys, or a note to edit it</dd>
+					</dl>
+				</section>
+				<section>
+					<h3><Icon name="cube" size={18} /> On a screen</h3>
+					<dl>
+						<dt>Drag, <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></dt>
+						<dd>Orbit</dd>
+						<dt>Right-drag, <kbd>⇧</kbd> + arrows</dt>
+						<dd>Pan</dd>
+						<dt>Scroll, <kbd>+</kbd><kbd>−</kbd></dt>
+						<dd>Zoom, toward the pointer</dd>
+						<dt>A view's name</dt>
+						<dd>Fly to it</dd>
+						<dt>Add note</dt>
+						<dd>Then click the model; <kbd>Esc</kbd> cancels</dd>
+					</dl>
+				</section>
+			</div>
+		</Dialog.Content>
+	</Dialog.Portal>
+</Dialog.Root>
 
 <style>
 	/* minmax(0, …) everywhere a track holds text: an `auto` track grows to
@@ -793,25 +831,6 @@
 		outline-offset: 2px;
 	}
 
-	.icon-btn {
-		display: inline-grid;
-		place-items: center;
-		flex: none;
-		width: 2.25rem;
-		height: 2.25rem;
-		border: 1px solid transparent;
-		border-radius: 9px;
-		background: transparent;
-		color: var(--text-dim);
-		cursor: pointer;
-	}
-
-	.icon-btn:hover {
-		background: var(--surface-hover);
-		border-color: var(--line-strong);
-		color: var(--text);
-	}
-
 	.link {
 		display: inline-flex;
 		align-items: center;
@@ -914,35 +933,6 @@
 	.hud.bottom {
 		bottom: 1rem;
 		align-items: flex-end;
-	}
-
-	/* The background picker is the one part of the HUD that takes clicks. */
-	.backdrops {
-		gap: 0.2rem;
-		padding: 0.25rem;
-		pointer-events: auto;
-	}
-
-	.backdrop {
-		display: grid;
-		place-items: center;
-		width: 2.25rem;
-		height: 2.25rem;
-		border: 1px solid transparent;
-		border-radius: 999px;
-		background: none;
-		color: var(--text-dim);
-		cursor: pointer;
-	}
-
-	.backdrop:hover {
-		color: var(--text);
-		background: var(--surface-hover);
-	}
-
-	.backdrop[aria-pressed='true'] {
-		background: var(--accent);
-		color: var(--accent-ink);
 	}
 
 	.chip {
@@ -1293,7 +1283,6 @@
 		color: var(--text-dim);
 	}
 
-	/* A drawn switch: the track is the input itself, the knob its gradient. */
 	.switch {
 		display: inline-flex;
 		align-items: center;
@@ -1305,41 +1294,8 @@
 		cursor: pointer;
 	}
 
-	.switch input {
-		appearance: none;
-		width: 2.4rem;
-		height: 1.35rem;
-		margin: 0;
-		border: 1px solid var(--line-strong);
-		border-radius: 999px;
-		background: radial-gradient(circle at 0.65rem 50%, var(--text-dim) 0.45rem, transparent 0.5rem)
-			var(--surface);
-		cursor: pointer;
-	}
-
-	.switch input:checked {
-		border-color: var(--accent);
-		background: radial-gradient(circle at 1.7rem 50%, var(--accent-ink) 0.45rem, transparent 0.5rem)
-			var(--accent);
-	}
-
 	.footbar :global(.credit) {
 		margin: 0;
-	}
-
-	.help {
-		width: min(52rem, calc(100vw - 2rem));
-		max-height: calc(100svh - 2rem);
-		padding: 1.5rem;
-		border: 1px solid var(--line-strong);
-		border-radius: calc(var(--radius) + 4px);
-		background: var(--panel);
-		color: var(--text);
-		box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
-	}
-
-	.help::backdrop {
-		background: rgba(3, 5, 8, 0.7);
 	}
 
 	.dialog-head {
@@ -1347,10 +1303,6 @@
 		align-items: center;
 		justify-content: space-between;
 		margin-bottom: 1rem;
-	}
-
-	.dialog-head form {
-		margin: 0;
 	}
 
 	.help-columns {
@@ -1364,7 +1316,7 @@
 		}
 	}
 
-	.help section {
+	.help-columns section {
 		padding: 1rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius);

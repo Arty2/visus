@@ -54,7 +54,7 @@ test('a model with many meshes is optimised, cameras kept', async ({ page }) => 
 	await ready(page);
 	await page.getByLabel('Open model…').setInputFiles(fixture('blocks.glb'));
 	await expectModel(page, 'blocks.glb');
-	await expect(page.getByRole('status')).toContainText('Optimised for VR: 60 meshes drawn as 1.');
+	await expect(page.getByText('Optimised for VR: 60 meshes drawn as 1.')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Overlook', exact: true })).toBeVisible();
 	expect(errors).toEqual([]);
 });

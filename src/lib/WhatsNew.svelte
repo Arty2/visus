@@ -5,15 +5,16 @@
 	// fails the build if its top heading isn't this version.
 	import changelogText from '../../CHANGELOG.md?raw';
 	import { parseChangelog, segments, shouldAnnounce } from './changelog';
+	import { Dialog } from 'bits-ui';
 
 	// Prefixed with the project name like every other key — see notes.svelte.ts.
 	const SEEN_KEY = 'visus:seen-version';
 
 	const latest = parseChangelog(changelogText)[0];
-	let dialog: HTMLDialogElement | undefined = $state();
+	let opened = $state(false);
 
 	function open() {
-		dialog?.showModal();
+		opened = true;
 		markSeen();
 	}
 
@@ -53,22 +54,25 @@
 </p>
 
 {#if latest}
-	<dialog bind:this={dialog} aria-labelledby="whats-new-title">
-		<h2 id="whats-new-title">What's new in {latest.version}</h2>
-		<p class="date"><time datetime={latest.date}>{latest.date}</time></p>
-		<ul>
-			{#each latest.lines as line, i (i)}
-				<li>
-					{#each segments(line) as segment, j (j)}
-						{#if segment.code}<code>{segment.text}</code>{:else}{segment.text}{/if}
+	<Dialog.Root bind:open={opened}>
+		<Dialog.Portal>
+			<Dialog.Overlay class="overlay" />
+			<Dialog.Content class="dialog narrow">
+				<Dialog.Title class="dialog-title">What's new in {latest.version}</Dialog.Title>
+				<p class="date"><time datetime={latest.date}>{latest.date}</time></p>
+				<ul>
+					{#each latest.lines as line, i (i)}
+						<li>
+							{#each segments(line) as segment, j (j)}
+								{#if segment.code}<code>{segment.text}</code>{:else}{segment.text}{/if}
+							{/each}
+						</li>
 					{/each}
-				</li>
-			{/each}
-		</ul>
-		<form method="dialog">
-			<button type="submit">Close</button>
-		</form>
-	</dialog>
+				</ul>
+				<Dialog.Close class="close-button">Close</Dialog.Close>
+			</Dialog.Content>
+		</Dialog.Portal>
+	</Dialog.Root>
 {/if}
 
 <style>
@@ -92,25 +96,6 @@
 	.version:hover {
 		border-color: var(--accent-line);
 		color: var(--accent);
-	}
-
-	dialog {
-		width: min(30rem, calc(100vw - 2rem));
-		padding: 1.5rem;
-		border: 1px solid var(--line-strong);
-		border-radius: 20px;
-		background: var(--panel);
-		color: var(--text);
-		box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
-	}
-
-	dialog::backdrop {
-		background: rgba(3, 5, 8, 0.7);
-	}
-
-	h2 {
-		margin: 0;
-		font-size: 1.2rem;
 	}
 
 	.date {
@@ -137,7 +122,7 @@
 		background: var(--surface);
 	}
 
-	form button {
+	:global(.close-button) {
 		width: 100%;
 		min-height: 2.75rem;
 		border: 1px solid var(--accent);

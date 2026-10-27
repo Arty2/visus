@@ -22,16 +22,18 @@ test('the sample opens with the cameras it carries, and a view can be looked fro
 
 test('the background is white unless chosen, and a choice is remembered', async ({ page }) => {
 	await ready(page);
-	await expect(page.getByRole('button', { name: 'White background' })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
-	await page.getByRole('button', { name: 'Sky background' }).click();
+	// One of four, so radios: Bits UI's single-choice toggle group.
+	await expect(page.getByRole('radio', { name: 'White background' })).toBeChecked();
+	await page.getByRole('radio', { name: 'Sky background' }).click();
 	await page.reload();
-	await expect(page.getByRole('button', { name: 'Sky background' })).toHaveAttribute(
-		'aria-pressed',
-		'true'
-	);
+	await expect(page.getByRole('radio', { name: 'Sky background' })).toBeChecked();
+	await expect(page.getByRole('radio', { name: 'White background' })).not.toBeChecked();
+});
+
+test('icon buttons say what they do on hover', async ({ page }) => {
+	await ready(page);
+	await page.getByRole('radio', { name: 'Night background' }).hover();
+	await expect(page.getByText('Night', { exact: true })).toBeVisible();
 });
 
 // Icons drawn in the browser once came out as HTML-namespaced <path>s, which

@@ -86,6 +86,145 @@ body {
 	outline-offset: 2px;
 }
 
+/*
+ * Parts drawn by Bits UI (src/routes/+page.svelte, Tip.svelte, WhatsNew):
+ * its dialogs and tooltips render at the end of <body>, outside any
+ * component's scoped styles, so their looks live here. They state their
+ * state as data attributes — data-state="open|closed|on|off|checked" —
+ * which is what's styled. Positions are set by Svelte through the CSSOM
+ * (style.cssText), which style-src 'self' allows; no style attribute is
+ * ever written into markup.
+ */
+.icon-btn {
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 9px;
+	background: transparent;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.icon-btn:hover {
+	background: var(--surface-hover);
+	border-color: var(--line-strong);
+	color: var(--text);
+}
+
+.overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	background: rgba(3, 5, 8, 0.72);
+}
+
+.dialog {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	z-index: 41;
+	width: min(52rem, calc(100vw - 2rem));
+	max-height: calc(100svh - 2rem);
+	overflow: auto;
+	padding: 1.5rem;
+	border: 1px solid var(--line-strong);
+	border-radius: calc(var(--radius) + 4px);
+	background: var(--panel);
+	color: var(--text);
+	box-shadow: 0 40px 120px rgba(0, 0, 0, 0.6);
+	transform: translate(-50%, -50%);
+}
+
+.dialog.narrow {
+	width: min(30rem, calc(100vw - 2rem));
+}
+
+.dialog-title {
+	margin: 0;
+	font-size: 1.2rem;
+	font-weight: 650;
+}
+
+.tip {
+	z-index: 50;
+	padding: 0.35rem 0.65rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 8px;
+	background: #10151c;
+	color: var(--text);
+	font-size: 0.82rem;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* The background picker: the one part of the canvas HUD that takes clicks. */
+.backdrops {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.25rem;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: rgba(9, 12, 16, 0.82);
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+	pointer-events: auto;
+}
+
+.backdrop {
+	display: grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: none;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.backdrop:hover {
+	color: var(--text);
+	background: var(--surface-hover);
+}
+
+.backdrop[data-state='on'] {
+	background: var(--accent);
+	color: var(--accent-ink);
+}
+
+.switch-track {
+	display: inline-flex;
+	align-items: center;
+	width: 2.4rem;
+	height: 1.35rem;
+	padding: 2px;
+	border: 1px solid var(--line-strong);
+	border-radius: 999px;
+	background: var(--surface);
+	cursor: pointer;
+}
+
+.switch-track[data-state='checked'] {
+	border-color: var(--accent);
+	background: var(--accent);
+}
+
+.switch-thumb {
+	display: block;
+	width: 0.95rem;
+	height: 0.95rem;
+	border-radius: 50%;
+	background: var(--text-dim);
+	transition: transform 120ms ease;
+}
+
+.switch-track[data-state='checked'] .switch-thumb {
+	background: var(--accent-ink);
+	transform: translateX(1.05rem);
+}
+
 code {
 	font-family: var(--mono);
 	font-size: 0.9em;
