@@ -125,9 +125,9 @@ can't hold; don't invent a third format before both stop being enough.
   one invalid at computed-value time can leave the page unreadable. This
   repo has broken the rule once already (`light-dark()`, black on black); see
   docs/LEARNINGS.md § Browsers.
-- **The script the browser downloads has a hard budget**, enforced in CI's
-  full suite (the number is in STACK.md). Raise it deliberately, in the
-  commit that earns it.
+- **The script the browser downloads has a hard budget** where the project
+  keeps one (STACK.md says whether, and the number). Raise it deliberately,
+  in the commit that earns it.
 - **The security policy is strict about origins and injection, loose about
   local mechanics.** No third-party script origin, ever, and no route from a
   string to markup or script (the gates fail the build on them). Blob

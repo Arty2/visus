@@ -98,7 +98,7 @@ fi
 # nothing while the only thing enforcing it was the sentence at the top of the
 # file saying so — this repo grew it by 25% in one session without noticing.
 #
-# So it's a budget, in the same spirit as scripts/budget.sh: raise it
+# So it's a budget, in the same spirit as osseus's JavaScript budget: raise it
 # deliberately, in the commit that earns it, or move the detail into
 # TECHNICAL.md or docs/ where nobody pays for it per turn. It counts the two
 # files together, because splitting one file in two is not a way to make it

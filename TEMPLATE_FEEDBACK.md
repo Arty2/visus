@@ -64,7 +64,9 @@ visus is a WebXR model viewer; three.js and two loaders are ~190 KB gzipped
 before any app code, so `scripts/budget.sh` went to 240 KB in the first
 commit, with the reasoning in the script. osseus could say up front that the
 number is for a page of forms, and suggest measuring the first-paint chunk
-separately from what's imported later.
+separately from what's imported later. Later the same day the owner wrote
+the budget off entirely for this project (see TECHNICAL.md § The gates): a
+per-project opt-out may be worth saying out loud in osseus.
 
 ## 2026-10-27 — Trusted Types blocks `DOMParser`, even for XML
 

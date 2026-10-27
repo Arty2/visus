@@ -12,10 +12,10 @@ both. See [README.md](./README.md) for the quickstart and
 CI is two jobs, and which of them runs is decided by whether the pull
 request is a draft.
 
-|                              | Runs                                                                                       | Takes |
-| ---------------------------- | ------------------------------------------------------------------------------------------ | ----- |
-| Draft pull request           | `check` — gates, types, lint, unit tests                                                   | ~30s  |
-| Ready for review, and `main` | `check` **and** `full` — the above plus Playwright, the bundle budget, `pnpm audit --prod` | ~90s  |
+|                              | Runs                                                                       | Takes |
+| ---------------------------- | -------------------------------------------------------------------------- | ----- |
+| Draft pull request           | `check` — gates, types, lint, unit tests                                   | ~30s  |
+| Ready for review, and `main` | `check` **and** `full` — the above plus Playwright and `pnpm audit --prod` | ~90s  |
 
 Open a pull request as a draft and leave it there while you work. Every push
 gets the short answer, which catches the ordinary mistake — a type error, a
@@ -74,11 +74,13 @@ without editing the file), and make a check that _can't run_ fail rather
 than pass — the line-budget gate originally reported "ok" when it couldn't
 read the file at all, which is the one outcome worse than not having it.
 
-`scripts/budget.sh` measures the gzipped JavaScript the browser downloads to
-run the app and fails over 240 KB — the skeleton's 100 KB, raised in 0.1.0
-for three.js (see § The viewer and the comment in the script). Raise it
-deliberately, in the commit that earns it — never as a side effect of an
-unrelated change.
+**There is no JavaScript budget.** osseus ships one (`scripts/budget.sh`,
+100 KB gzipped), visus raised it to 240 KB for three.js, and then wrote it
+off: for a headset model viewer, what matters is what it can open and how
+well it runs once loaded, and a byte ceiling was steering choices away from
+tested libraries toward hand-rolled code. Download size is still worth
+watching — three.js and anything added are imported after first paint, so
+the page itself stays quick — but nothing fails over it.
 
 Every `pnpm run gates` invocation also appends one line to the local,
 gitignored `.claude/logs/gates.jsonl` — see § Self-improving below.
@@ -361,8 +363,7 @@ and a model on screen sit a scene graph, a renderer, and glTF and COLLADA
 parsers. Writing those by hand is a project of its own, and the alternatives
 (A-Frame, Babylon.js) are larger and bring a framework with them. three.js
 is imported from `src/routes/+page.svelte` after first paint, so the page
-arrives fast; the budget counts it anyway, because the headset downloads it
-before anything is visible. Held back on purpose, and what would end it:
+arrives fast. Held back on purpose, and what would end it:
 
 - **Draco, Meshopt and KTX2** decoders. Each is a WASM or worker blob
   (already allowed by the CSP) plus weight; a compressed glTF is refused with

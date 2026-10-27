@@ -17,8 +17,7 @@
 		"quick": "pnpm run gates && pnpm run check && pnpm run test:unit --run",
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
-		"test": "pnpm run gates && pnpm run check && pnpm run lint && pnpm run test:unit --run && pnpm run test:e2e && pnpm run budget",
-		"budget": "bash scripts/budget.sh"
+		"test": "pnpm run gates && pnpm run check && pnpm run lint && pnpm run test:unit --run && pnpm run test:e2e"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.12.1",

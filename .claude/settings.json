@@ -13,7 +13,6 @@
 			"Bash(pnpm run test:unit *)",
 			"Bash(pnpm run test:e2e *)",
 			"Bash(pnpm run build)",
-			"Bash(pnpm run budget)",
 			"Bash(pnpm exec svelte-kit sync)",
 			"Bash(git status *)",
 			"Bash(git diff *)",

@@ -16,13 +16,13 @@ change may land; Vercel's free tier builds and deploys it through
 ## Commands
 
 pnpm dev · pnpm check · pnpm lint · pnpm gates · pnpm quick · pnpm test:unit
-· pnpm test:e2e · pnpm test · pnpm build · pnpm budget · pnpm feedback
+· pnpm test:e2e · pnpm test · pnpm build · pnpm feedback
 
 `pnpm gates` runs `scripts/gates.sh`, the rules a linter can't enforce — see
 TECHNICAL.md § The gates. `pnpm quick` (gates + types + unit tests, no
 browser) is the one to run while iterating; it answers in a few seconds, and
 is what a draft pull request runs in CI (plus lint). `pnpm test` is the full
-suite — Playwright and the budget included — which is what ready-for-review
+suite — Playwright included — which is what ready-for-review
 runs. `pnpm feedback "..."` appends a stub to TEMPLATE_FEEDBACK.md.
 
 ## Where things live
@@ -49,7 +49,7 @@ runs. `pnpm feedback "..."` appends a stub to TEMPLATE_FEEDBACK.md.
   and the response headers in `vercel.json`.
 - **CI** — `.github/workflows/ci.yml`: `check` on every push, `full` only on
   `main` and on a pull request that is no longer a draft.
-- **Budget** — `scripts/budget.sh`, 240 KB of gzipped JavaScript (three.js).
+- **No JavaScript budget** — written off for visus; TECHNICAL.md § The gates.
 
 ## Bootstrapping, the stack half
 

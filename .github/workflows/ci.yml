@@ -32,8 +32,8 @@ permissions:
 #
 # `check` answers "is this coherent": gates, types, lint, unit tests, no
 # browser, done in well under a minute, and runs on everything. `full`
-# answers "is this allowed to land": the above plus Playwright and the JS
-# budget, and only runs once landing is actually in prospect — on `main`, and
+# answers "is this allowed to land": the above plus Playwright and a
+# dependency audit, and only runs once landing is actually in prospect — on `main`, and
 # on a pull request that is no longer a draft.
 #
 # So: open a pull request as a draft and iterate against `check`. Mark it
@@ -109,9 +109,6 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
-
-      - name: Bundle budget
-        run: pnpm run budget
 
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level high
